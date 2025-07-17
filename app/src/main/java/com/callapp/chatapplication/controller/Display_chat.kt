@@ -5,10 +5,12 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -28,17 +30,16 @@ import com.android.volley.Request
 import com.android.volley.toolbox.JsonArrayRequest
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
+import com.bumptech.glide.Glide
 import com.callapp.chatapplication.R
 import com.callapp.chatapplication.databinding.ActivityDisplayChatBinding
 import com.callapp.chatapplication.model.Message
 import com.callapp.chatapplication.view.MessageAdapter
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class Display_chat : AppCompatActivity() {
+    private val templateBodyMap = mutableMapOf<String, String>()
     private lateinit var binding: ActivityDisplayChatBinding
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MessageAdapter
@@ -87,14 +88,16 @@ class Display_chat : AppCompatActivity() {
                     onSuccess = {
                         Toast.makeText(this, "Message Sent", Toast.LENGTH_SHORT).show()
                         binding.editTextMessage.setText("")
-
                         val sentMessage = Message(
                             sender = "you",
                             messageBody = text,
                             messageType = "text",
                             timestamp = System.currentTimeMillis() / 1000,
-                            url = null
+                            url = null,
+                            recipientId = currentContactWaId,
+                            waId = currentContactWaId
                         )
+
                         adapter.addMessage(sentMessage)
                         binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
 
@@ -117,7 +120,47 @@ class Display_chat : AppCompatActivity() {
                         val obj = response.getJSONObject(i)
 
                         val messageType = obj.optString("message_type") ?: "text"
-                        val messageBody = obj.optString("message_body")
+                        //val messageBody = obj.optString("message_body")
+
+                        val messageBody = when (messageType) {
+                            "template" -> {
+                                val extraInfoStr = obj.optString("extra_info")
+                                if (extraInfoStr.isNotEmpty()) {
+                                    try {
+                                        val extraInfo = JSONObject(extraInfoStr)
+                                        val name = extraInfo.optString("name")
+                                        val components = extraInfo.optJSONArray("components")
+
+                                        // Get the body component
+                                        val body = (0 until (components?.length() ?: 0))
+                                            .mapNotNull { components?.optJSONObject(it) }
+                                            .firstOrNull { it.optString("type") == "body" }
+
+                                        val params = body?.optJSONArray("parameters")
+                                        val values = (0 until (params?.length() ?: 0)).map { i ->
+                                            params!!.getJSONObject(i).optString("text")
+                                        }
+
+                                        // Now get original body text from templates map
+                                        val templateText = templateBodyMap[name] ?: name
+
+                                        // Replace {{1}}, {{2}}, ... with values
+                                        var rendered = templateText
+                                        values.forEachIndexed { index, v ->
+                                            rendered = rendered.replace("{{${index + 1}}}", v)
+                                        }
+                                        rendered
+                                    } catch (e: Exception) {
+                                        "Template Message"
+                                    }
+                                } else {
+                                    "Template Message"
+                                }
+                            }
+
+                            else -> obj.optString("message_body", "")
+                        }
+
                         val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
                         val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
 
@@ -125,14 +168,19 @@ class Display_chat : AppCompatActivity() {
                             continue
                         }
                         val sender = obj.optString("sender")
+                        val recipientId = obj.optString("recipient_id")
+                        val waId = obj.optString("wa_id")
 
                         val message = Message(
                             sender = if (sender.isNullOrEmpty()) null else sender,
                             messageBody = messageBody,
                             messageType = messageType,
                             timestamp = timestamp,
-                            url = imageUrl
+                            url = imageUrl,
+                            recipientId = recipientId,
+                            waId = waId
                         )
+
 
                         messages.add(message)
                     }
@@ -157,14 +205,26 @@ class Display_chat : AppCompatActivity() {
             finish()
         }
 
-
+        fetchTemplates(
+            onResult = {
+                loadMessages()
+            },
+            onError = {
+                Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
+                loadMessages()
+            }
+        )
         binding.btnTemplateAdd.setOnClickListener {
             fetchTemplates(onResult = { templateList ->
                 showTemplateDialog(templateList)
+
             }, onError = {
                 Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
+
             })
         }
+
+
 
 
     }
@@ -222,18 +282,45 @@ class Display_chat : AppCompatActivity() {
         val request = JsonObjectRequest(Request.Method.GET, url, null,
             { response ->
                 val templates = response.optJSONArray("data") ?: response.optJSONArray("templates")
+
+                templateBodyMap.clear()
+
                 val result = mutableListOf<JSONObject>()
-                for (i in 0 until (templates?.length() ?: 0)) {
-                    templates?.getJSONObject(i)?.let { result.add(it) }
+
+                val templatesLength = templates?.length() ?: 0
+                for (i in 0 until templatesLength) {
+                    val template = templates?.getJSONObject(i) ?: continue
+                    val name = template.optString("name")
+                    val componentsStr = template.optString("components")
+
+                    try {
+                        val components = JSONArray(componentsStr)
+                        for (j in 0 until components.length()) {
+                            val comp = components.getJSONObject(j)
+                            if (comp.optString("type") == "BODY") {
+                                val bodyText = comp.optString("text")
+                                templateBodyMap[name] = bodyText
+                            }
+                        }
+
+                        result.add(template)
+                    } catch (e: Exception) {
+                        Log.e("TEMPLATE_PARSE", "Error parsing components for $name", e)
+                    }
                 }
-                onResult(result)
+
+                onResult(result) // result can be used for template dialog
+                loadMessages()
             },
             { error ->
                 onError(error.message ?: "Template fetch failed")
+                loadMessages() // fallback load even if templates failed
             }
         )
+
         Volley.newRequestQueue(this).add(request)
     }
+
 
     fun showTemplateDialog(templateList: List<JSONObject>) {
         val dialogView = layoutInflater.inflate(R.layout.message_template, null)
@@ -245,96 +332,30 @@ class Display_chat : AppCompatActivity() {
         val spinnerTemplates = dialogView.findViewById<Spinner>(R.id.spinnerTemplates)
         val buttonSend = dialogView.findViewById<Button>(R.id.buttonSend)
         val buttonCancel = dialogView.findViewById<Button>(R.id.buttonCancel)
+        val inputFields = dialogView.findViewById<LinearLayout>(R.id.inputFieldsLayout)
 
         val templateNames = templateList.map { it.optString("name") }
-        val adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, templateNames)
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, templateNames)
         spinnerTemplates.adapter = adapter
 
-        val inputFields = dialogView.findViewById<LinearLayout>(R.id.inputFieldsLayout)
         var selectedTemplate: JSONObject? = null
         var userInputs = mutableListOf<String>()
 
         spinnerTemplates.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, pos: Int, id: Long) {
-                Log.d("TEMPLATE_UI", "Spinner selected position: $pos")
-
                 selectedTemplate = templateList[pos]
                 inputFields.removeAllViews()
                 userInputs.clear()
 
-                selectedTemplate?.let { safeTemplate ->
-                    Log.d(
-                        "TEMPLATE_UI",
-                        "Calling renderTemplateUI for: ${safeTemplate.optString("name")}"
-                    )
-                    renderTemplateUI(safeTemplate, inputFields, this@Display_chat, userInputs)
-                }
-
-                val components = try {
-                    selectedTemplate?.optJSONArray("components") ?: JSONArray()
-                } catch (e: Exception) {
-                    JSONArray()
-                }
-
-                val bodyComp = (0 until components.length())
-                    .mapNotNull { components.optJSONObject(it) }
-                    .find { it.optString("type") == "BODY" }
-
-                val text = bodyComp?.optString("text") ?: ""
-                val placeholderCount = Regex("\\{\\{\\d+\\}\\}").findAll(text).count()
-
-
-                for (i in 0 until placeholderCount) {
-                    val input = EditText(this@Display_chat)
-                    input.hint = "Field ${i + 1}"
-                    input.layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-
-                    // Add input to layout
-                    inputFields.addView(input)
-
-                    // Add empty string to maintain userInputs size
-                    userInputs.add("")
-
-                    val index = i // capture index correctly
-                    input.addTextChangedListener(object : TextWatcher {
-
-                        override fun onTextChanged(
-                            s: CharSequence?,
-                            start: Int,
-                            before: Int,
-                            count: Int
-                        ) {
-                            if (index < userInputs.size) {
-                                userInputs[index] = s.toString()
-                            }
-                        }
-
-                        override fun beforeTextChanged(
-                            s: CharSequence?,
-                            start: Int,
-                            count: Int,
-                            after: Int
-                        ) {
-                        }
-
-                        override fun afterTextChanged(s: Editable?) {}
-
-                    })
-
+                selectedTemplate?.let { selected ->
+                    renderTemplateUI(selected, inputFields, this@Display_chat, userInputs)
                 }
             }
-
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        buttonCancel.setOnClickListener {
-            alertDialog.dismiss()
-        }
+        buttonCancel.setOnClickListener { alertDialog.dismiss() }
 
         buttonSend.setOnClickListener {
             selectedTemplate?.let {
@@ -344,25 +365,95 @@ class Display_chat : AppCompatActivity() {
         }
 
         alertDialog.show()
+
+        // This must come after .show()
         alertDialog.window?.setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or
                     WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         )
 
+        alertDialog.window?.decorView?.post {
+            val firstInput = (0 until inputFields.childCount)
+                .mapNotNull { inputFields.getChildAt(it) as? EditText }
+                .firstOrNull()
+
+            firstInput?.let {
+                it.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(it, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
     }
 
     fun sendTemplateMessage(template: JSONObject, inputs: List<String>) {
         val name = template.optString("name")
         val to = intent.getStringExtra("wa_id_or_sender") ?: return
-        val componentsArray = JSONArray()
 
-        val bodyParams = JSONArray()
-        inputs.forEach {
-            bodyParams.put(JSONObject().put("type", "text").put("text", it))
+        if (inputs.any { it.isBlank() }) {
+            Toast.makeText(this, "Please fill all template fields", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        componentsArray.put(JSONObject().put("type", "body").put("parameters", bodyParams))
+        val componentsArray = JSONArray()
 
+        val hasImageHeader = template.optString("components").contains("\"type\":\"HEADER\"") &&
+                template.optString("components").contains("\"format\":\"IMAGE\"")
+
+        // ✅ Add HEADER with image if required
+        val componentsStr = template.optString("components")
+        val componentsArr = JSONArray(componentsStr)
+        var headerNeedsImageUpload = false
+
+        for (i in 0 until componentsArr.length()) {
+            val comp = componentsArr.optJSONObject(i)
+            if (comp.optString("type") == "HEADER" && comp.optString("format") == "IMAGE") {
+                val example = comp.optJSONObject("example")
+                val exampleUrls = example?.optJSONArray("header_handle")
+                if (exampleUrls == null || exampleUrls.length() == 0) {
+                    headerNeedsImageUpload = true
+                }
+                break
+            }
+        }
+
+        if (headerNeedsImageUpload) {
+            val headerParams = JSONArray()
+            val imageUrl = inputs.getOrNull(0) ?: ""
+
+            if (!imageUrl.startsWith("http")) {
+                Toast.makeText(this, "Image URL required (valid HTTPS)", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            headerParams.put(JSONObject().apply {
+                put("type", "image")
+                put("image", JSONObject().put("link", imageUrl))
+            })
+
+            componentsArray.put(JSONObject().apply {
+                put("type", "header")
+                put("parameters", headerParams)
+            })
+        }
+
+
+        // ✅ Add BODY parameters (adjust for image header shift)
+        val bodyParams = JSONArray()
+        val bodyStartIndex = if (hasImageHeader) 1 else 0
+
+        for (i in bodyStartIndex until inputs.size) {
+            bodyParams.put(JSONObject().apply {
+                put("type", "text")
+                put("text", inputs[i])
+            })
+        }
+
+        componentsArray.put(JSONObject().apply {
+            put("type", "body")
+            put("parameters", bodyParams)
+        })
+
+        // ✅ Final Payload
         val payload = JSONObject().apply {
             put("messaging_product", "whatsapp")
             put("to", to)
@@ -374,14 +465,39 @@ class Display_chat : AppCompatActivity() {
             })
         }
 
+        Log.d("TEMPLATE_SEND", "Payload: $payload")
+
+        // ✅ Rendered preview message (for local UI)
+        val templateText = templateBodyMap[name] ?: name
+        var rendered = templateText
+        val bodyInputs = inputs.drop(if (hasImageHeader) 1 else 0)
+        bodyInputs.forEachIndexed { index, value ->
+            rendered = rendered.replace("{{${index + 1}}}", value)
+        }
+
+        val sentMessage = Message(
+            sender = null,
+            messageBody = rendered,
+            messageType = "template",
+            timestamp = System.currentTimeMillis() / 1000,
+            url = if (hasImageHeader) inputs.firstOrNull() else null,
+            recipientId = to,
+            waId = to
+        )
+
+        loadMessages() // Optionally show preview immediately
+
         val url = "https://waba.mpocket.in/api/361462453714220/messages"
         val request = object : JsonObjectRequest(Method.POST, url, payload,
             { response ->
+                Log.d("TEMPLATE_SEND", "Success: $response")
                 Toast.makeText(this, "Template sent", Toast.LENGTH_SHORT).show()
             },
             { error ->
                 val errData = error.networkResponse?.data?.let { String(it) }
+                Log.e("TEMPLATE_SEND", "Error: $errData")
                 Toast.makeText(this, "Send failed: $errData", Toast.LENGTH_LONG).show()
+                loadMessages()
             }
         ) {
             override fun getHeaders(): MutableMap<String, String> {
@@ -394,6 +510,9 @@ class Display_chat : AppCompatActivity() {
 
         Volley.newRequestQueue(this).add(request)
     }
+
+
+
 
     fun renderTemplateUI(
         template: JSONObject,
@@ -414,15 +533,14 @@ class Display_chat : AppCompatActivity() {
 
         Log.d("TEMPLATE_UI", "Total components: ${components.length()}")
 
-
         for (i in 0 until components.length()) {
             val comp = components.optJSONObject(i)
             val type = comp.optString("type")
             Log.d("TEMPLATE_UI", "Rendering component #$i of type: $type")
+
             when (type) {
                 "HEADER" -> {
                     val format = comp.optString("format")
-                    Log.d("TEMPLATE_UI", "Header format: $format")
                     when (format) {
                         "TEXT" -> {
                             val header = TextView(context).apply {
@@ -435,98 +553,299 @@ class Display_chat : AppCompatActivity() {
                         }
 
                         "IMAGE" -> {
-                            val image = ImageView(context).apply {
+                            val imageLayout = LinearLayout(context).apply {
+                                orientation = LinearLayout.VERTICAL
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                )
+                            }
+
+                            val imageView = ImageView(context).apply {
                                 layoutParams = LinearLayout.LayoutParams(
                                     LinearLayout.LayoutParams.MATCH_PARENT, 400
                                 )
                                 scaleType = ImageView.ScaleType.CENTER_CROP
-                                setImageResource(R.drawable.baseline_attach_file_24)
-                            }
-                            layout.addView(image)
-                        }
-
-                    }
-                }
-
-                "BODY" -> {
-                    val bodyText = comp.optString("text")
-                    val placeholderCount = Regex("\\{\\{\\d+\\}\\}").findAll(bodyText).count()
-
-                    for (j in 0 until placeholderCount) {
-
-                        val input = EditText(context).apply {
-                            hint = "Field ${j + 1}"
-                            layoutParams = LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT
-                            )
-                            isFocusable = true
-                            isFocusableInTouchMode = true
-                            isClickable = true
-                            requestFocus()  // <--- add this to trigger soft keyboard
-                        }
-                        layout.addView(input)
-                        userInputs.add("")
-
-                        val index = j
-                        input.addTextChangedListener(object : TextWatcher {
-                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                                userInputs[index] = s.toString()
                             }
 
-                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                            override fun afterTextChanged(s: Editable?) {}
-                        })
-                    }
+                            val urlEditText = EditText(context).apply {
+                                hint = "Image URL"
+                                inputType = InputType.TYPE_TEXT_VARIATION_URI
+                                setPadding(16, 8, 16, 8)
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                )
+                            }
 
-                    // Then add the preview below
-                    val preview = TextView(context).apply {
-                        text = bodyText
-                        setPadding(0, 10, 0, 10)
-                    }
-                    layout.addView(preview)
-                }
+                            try {
+                                val example = comp.optJSONObject("example")
+                                val handles = example?.optJSONArray("header_handle")
+                                val imageUrl = handles?.optString(0)
 
+                                if (!imageUrl.isNullOrEmpty()) {
+                                    urlEditText.setText(imageUrl)
 
-                "FOOTER" -> {
-                    val footer = TextView(context).apply {
-                        text = comp.optString("text")
-                        Log.d("TEMPLATE_UI", "Footer: ${comp.optString("text")}")
-                        setTextColor(Color.GRAY)
-                        setPadding(0, 10, 0, 10)
-                    }
-                    layout.addView(footer)
-                }
+                                    Glide.with(context)
+                                        .load(imageUrl)
+                                        .placeholder(R.drawable.baseline_attach_file_24)
+                                        .into(imageView)
+                                } else {
+                                    imageView.setImageResource(R.drawable.baseline_attach_file_24)
+                                }
+                            } catch (e: Exception) {
+                                imageView.setImageResource(R.drawable.baseline_attach_file_24)
+                                Log.e("TEMPLATE_UI", "Image load failed", e)
+                            }
 
-                "BUTTONS" -> {
-                    val buttons = comp.optJSONArray("buttons") ?: JSONArray()
-                    for (b in 0 until buttons.length()) {
-                        val btn = buttons.getJSONObject(b)
-                        val button = Button(context).apply {
-                            text = btn.optString("text", "Action")
-                            Log.d(
-                                "TEMPLATE_UI",
-                                "Buttons count: ${comp.optJSONArray("buttons")?.length()}"
-                            )
-                            layoutParams = LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT
-                            )
+                            urlEditText.addTextChangedListener(object : TextWatcher {
+                                override fun afterTextChanged(s: Editable?) {}
+                                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                                    Glide.with(context)
+                                        .load(s.toString())
+                                        .placeholder(R.drawable.baseline_attach_file_24)
+                                        .into(imageView)
+                                }
+                            })
+
+                            imageLayout.addView(imageView)
+                            imageLayout.addView(urlEditText)
+                            layout.addView(imageLayout)
                         }
-                        layout.addView(button)
+
+                    }
+                }
+                    "BODY" -> {
+                        val bodyText = comp.optString("text")
+                        val placeholderRegex = Regex("\\{\\{(\\d+)\\}\\}")
+                        val matches = placeholderRegex.findAll(bodyText).toList()
+
+                        val defaultValues = try {
+                            val example = comp.optJSONObject("example")
+                            val bodyArray = example?.optJSONArray("body_text")
+                            val firstSet = bodyArray?.optJSONArray(0)
+                            (0 until (firstSet?.length() ?: 0)).map { i ->
+                                firstSet?.optString(i) ?: ""
+                            }
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+
+                        val preview = TextView(context).apply {
+                            text = bodyText
+                            setPadding(0, 10, 0, 10)
+                            setTextColor(Color.DKGRAY)
+                        }
+                        layout.addView(preview)
+
+                        userInputs.clear()
+
+                        fun updatePreview() {
+                            var updatedText = bodyText
+                            for ((index, match) in matches.withIndex()) {
+                                val original = match.value
+                                val input = userInputs.getOrNull(index) ?: ""
+                                //updatedText = updatedText.replace(original, "{{${input}}}")
+
+                                updatedText = updatedText.replace(original, input)
+
+
+                            }
+                            preview.text = updatedText
+                        }
+
+                        for (i in matches.indices) {
+                            val defaultValue = defaultValues.getOrNull(i) ?: ""
+
+                            val inputField = EditText(context).apply {
+                                hint = "Field ${i + 1}"
+                                setText(defaultValue)
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                )
+                                inputType = InputType.TYPE_CLASS_TEXT
+                                isFocusable = true
+                                isFocusableInTouchMode = true
+                                requestFocus()
+                                setPadding(16, 16, 16, 16)
+                            }
+
+
+                            userInputs.add(defaultValue)
+
+                            inputField.addTextChangedListener(object : TextWatcher {
+                                override fun beforeTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    count: Int,
+                                    after: Int
+                                ) {
+                                }
+
+                                override fun onTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    before: Int,
+                                    count: Int
+                                ) {
+                                    userInputs[i] = s.toString()
+                                    updatePreview()
+                                }
+
+                                override fun afterTextChanged(s: Editable?) {}
+                            })
+
+                            layout.addView(inputField)
+                        }
+
+                        updatePreview()
+                    }
+
+
+
+                    "FOOTER" -> {
+                        val footer = TextView(context).apply {
+                            text = comp.optString("text")
+                            setTextColor(Color.GRAY)
+                            setPadding(0, 10, 0, 10)
+                        }
+                        layout.addView(footer)
+                    }
+
+                    "BUTTONS" -> {
+                        val buttons = comp.optJSONArray("buttons") ?: JSONArray()
+                        for (b in 0 until buttons.length()) {
+                            val btn = buttons.getJSONObject(b)
+                            val button = Button(context).apply {
+                                text = btn.optString("text", "Action")
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                )
+                            }
+                            layout.addView(button)
+                        }
                     }
                 }
 
+                Log.d("TEMPLATE_UI", "Rendering template: ${template.optString("name")}")
             }
-            Log.d("TEMPLATE_UI", "Rendering template: ${template.optString("name")}")
 
         }
-    }
-    fun formatTimestamp(timestamp: String): String {
-        val tsLong = timestamp.toLong() * 1000
-        val date = Date(tsLong)
-        val format = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-        return format.format(date)
+    fun loadMessages() {
+        val number = intent.getStringExtra("wa_id_or_sender") ?: return
+        val url = "https://waba.mpocket.in/api/phone/get/361462453714220/$number/1"
+
+        val request = JsonArrayRequest(Request.Method.GET, url, null,
+            { response ->
+                val messages = mutableListOf<Message>()
+                for (i in 0 until response.length()) {
+                    val obj = response.getJSONObject(i)
+                    val messageType = obj.optString("message_type") ?: "text"
+
+                    val messageBody = when (messageType) {
+                        "template" -> {
+                            val extraInfoStr = obj.optString("extra_info")
+                            if (extraInfoStr.isNotEmpty()) {
+                                try {
+                                    val extraInfo = JSONObject(extraInfoStr)
+                                    val name = extraInfo.optString("name")
+                                    val components = extraInfo.optJSONArray("components")
+
+                                    val body = (0 until (components?.length() ?: 0))
+                                        .mapNotNull { components?.optJSONObject(it) }
+                                        .firstOrNull { it.optString("type") == "body" }
+
+                                    val params = body?.optJSONArray("parameters")
+                                    val values = (0 until (params?.length() ?: 0)).map { i ->
+                                        params!!.getJSONObject(i).optString("text")
+                                    }
+
+                                    val templateText = templateBodyMap[name] ?: name
+
+                                    var rendered = templateText
+                                    values.forEachIndexed { index, v ->
+                                        rendered = rendered.replace("{{${index + 1}}}", v)
+                                    }
+                                    rendered
+                                } catch (e: Exception) {
+                                    "Template Message"
+                                }
+                            } else {
+                                "Template Message"
+                            }
+                        }
+
+                        else -> obj.optString("message_body", "")
+                    }
+
+                  //  val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
+                    var imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
+
+                    if (messageType == "template" && imageUrl.isNullOrEmpty()) {
+                        try {
+                            val extraInfoStr = obj.optString("extra_info")
+                            if (extraInfoStr.isNotEmpty()) {
+                                val extraInfo = JSONObject(extraInfoStr)
+                                val components = extraInfo.optJSONArray("components")
+
+                                val header = (0 until (components?.length() ?: 0))
+                                    .mapNotNull { components?.optJSONObject(it) }
+                                    .firstOrNull {
+                                        it.optString("type").equals("HEADER", true) &&
+                                                it.optString("format").equals("IMAGE", true) &&
+                                                it.has("example")
+                                    }
+
+                                val example = header?.optJSONObject("example")
+                                val headerHandle = example?.optJSONArray("header_handle")
+                                val extractedUrl = headerHandle?.optString(0)
+
+                                if (!extractedUrl.isNullOrEmpty()) {
+                                    imageUrl = extractedUrl
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("IMG_PARSE", "Header image parse failed", e)
+                        }
+                    }
+
+                    val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
+                    if (messageBody.isNullOrEmpty() && messageType != "image") continue
+
+                    val sender = obj.optString("sender")
+                    val recipientId = obj.optString("recipient_id")
+                    val waId = obj.optString("wa_id")
+
+                    val message = Message(
+                        sender = if (sender.isNullOrEmpty()) null else sender,
+                        messageBody = messageBody,
+                        messageType = messageType,
+                        timestamp = timestamp,
+                        url = imageUrl,
+                        recipientId = recipientId,
+                        waId = waId
+                    )
+
+
+                    messages.add(message)
+                }
+
+                messages.reverse()
+                adapter.setMessages(messages)
+
+                binding.recyclerViewMessages.post {
+                    binding.recyclerViewMessages.scrollToPosition(messages.size - 1)
+                }
+            },
+            { error ->
+                Log.e("Volley", "Error loading messages", error)
+                Toast.makeText(this, "Failed to load messages", Toast.LENGTH_SHORT).show()
+            })
+
+        Volley.newRequestQueue(this).add(request)
     }
 
 

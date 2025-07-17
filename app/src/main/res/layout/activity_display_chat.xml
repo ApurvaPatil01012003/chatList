@@ -1,106 +1,91 @@
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/main"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:focusableInTouchMode="true"
-    android:fitsSystemWindows="true"
-    xmlns:tools="http://schemas.android.com/tools"
-    tools:context=".controller.Display_chat">
-
+    android:layout_height="match_parent">
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorOnPrimary"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        >
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="@android:color/white"
             android:subtitleTextColor="#666666"
-            android:titleTextColor="#000000" />
+            android:titleTextColor="#000000"/> >
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E0E0E0" />
+
     </com.google.android.material.appbar.AppBarLayout>
-    <View
-        android:id="@+id/dividerView"
-        android:layout_width="0dp"
-        android:layout_height="1dp"
-        android:background="#DDDDDD"
-        app:layout_constraintTop_toBottomOf="@id/appBar"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
 
 
-
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewMessages"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:padding="4dp"
-        app:layout_constraintBottom_toTopOf="@id/chatInputLayout"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appBar"
-        app:layout_constraintVertical_bias="0.0" />
-
+    <!-- Message Area -->
     <LinearLayout
-        android:id="@+id/chatInputLayout"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="#FFFFFF"
-        android:orientation="horizontal"
-        android:padding="8dp"
-        android:gravity="center_vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:id="@+id/chat_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior"
+        android:fitsSystemWindows="true">
 
-        <ImageButton
-            android:id="@+id/btnTemplateAdd"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="@android:color/transparent"
-            android:src="@drawable/baseline_add_24"
-            app:tint="#666666" />
 
-        <EditText
-            android:id="@+id/editTextMessage"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewMessages"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_whatsapp_input"
-            android:hint="Message"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="8dp"
-            android:textColor="#000000"
-            android:textSize="15sp"
-            android:maxLines="5"
-            android:minLines="1"
-            android:inputType="textMultiLine"
-            android:gravity="top|start" />
+            android:clipToPadding="false" />
 
-        <ImageButton
-            android:id="@+id/buttonAttach"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="@android:color/transparent"
-            android:src="@drawable/baseline_attach_file_24"
-            app:tint="#666666" />
+        <!-- Message Input Bar -->
+        <LinearLayout
+            android:id="@+id/messageInputBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#FFFFFF"
+            android:gravity="center_vertical">
 
-        <ImageButton
-            android:id="@+id/buttonSend"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="4dp"
-            android:background="@drawable/bg_circle_initial"
-            android:src="@drawable/baseline_send_24"
-            app:tint="#FFFFFF" />
+            <ImageButton
+                android:id="@+id/btnTemplateAdd"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@android:color/transparent"
+                android:src="@drawable/baseline_add_24"
+                app:tint="#666666" />
+
+
+            <EditText
+                android:id="@+id/editTextMessage"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:hint="Type a message"
+                android:padding="10dp"
+                android:maxLines="4"
+                android:minLines="1"/>
+            <ImageButton
+                android:id="@+id/buttonAttach"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@android:color/transparent"
+                android:src="@drawable/baseline_attach_file_24"
+                app:tint="#666666" />
+            <ImageButton
+                android:id="@+id/buttonSend"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_circle_initial"
+                android:src="@drawable/baseline_send_24"
+                app:tint="#FFFFFF" />
+        </LinearLayout>
     </LinearLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -41,11 +41,14 @@ class MessageAdapter(
         return when {
             message.messageType == "image" && message.isSentByMe() -> TYPE_IMAGE_SENT
             message.messageType == "image" && !message.isSentByMe() -> TYPE_IMAGE_RECEIVED
-            message.messageType == "text" && message.isSentByMe() -> TYPE_TEXT_SENT
+
+            (message.messageType == "text" || message.messageType == "template") && message.isSentByMe() ->
+                TYPE_TEXT_SENT
 
             else -> TYPE_TEXT_RECEIVED
         }
     }
+
 
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -124,10 +127,16 @@ class MessageAdapter(
         return Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY)
     }
     fun formatTimestamp(timestamp: Long): String {
-        val date = Date(timestamp * 1000) // convert seconds to milliseconds
-        val format = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-        return format.format(date)
+        val date = Date(timestamp * 1000)
+        val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
+
+        val time = timeFormat.format(date)
+        val day = dateFormat.format(date)
+
+        return "$time  |  $day"
     }
+
 
 }
 
