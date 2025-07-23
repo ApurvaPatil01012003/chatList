@@ -5,7 +5,6 @@
     android:orientation="vertical"
     android:padding="8dp">
 
-    <!-- Chat bubble -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -23,13 +22,26 @@
             android:textSize="15sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/timestampText"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#888888"
-            android:textSize="10sp"
-            android:layout_marginTop="6dp"
-            android:layout_gravity="end"/>
+            android:orientation="horizontal"
+            android:layout_gravity="end"
+            android:layout_marginTop="6dp">
+
+            <TextView
+                android:id="@+id/timestampText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#666666"
+                android:textSize="10sp" />
+
+            <ImageView
+                android:id="@+id/statusTick"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="4dp"
+                android:src="@drawable/baseline_done_24" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

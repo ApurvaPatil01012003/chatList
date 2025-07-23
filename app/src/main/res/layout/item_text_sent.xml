@@ -1,4 +1,5 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:padding="8dp"
@@ -24,14 +25,28 @@
             android:textSize="13sp"
             android:textStyle="bold" />
 
-        <!-- Timestamp -->
-        <TextView
-            android:id="@+id/timestampText"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#666666"
-            android:textSize="10sp"
+            android:orientation="horizontal"
             android:layout_gravity="end"
-            android:layout_marginTop="6dp" />
+            android:layout_marginTop="6dp">
+
+            <TextView
+                android:id="@+id/timestampText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#666666"
+                android:textSize="10sp" />
+
+            <ImageView
+                android:id="@+id/statusTick"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="4dp"
+                android:src="@drawable/baseline_done_24"
+                app:tint="@color/black" />
+        </LinearLayout>
+
     </LinearLayout>
 </LinearLayout>

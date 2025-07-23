@@ -1,16 +1,22 @@
 package com.callapp.chatapplication.model
 
 data class Message(
-    val sender: String?,         // May be null for sent messages
+    val sender: String?,
     val messageBody: String?,
     val messageType: String,
     val timestamp: Long,
     val url: String?,
-    val recipientId: String?,    // New field
-    val waId: String?            // New field (user's number)
+    val recipientId: String?,
+    val waId: String?,
+    val status: String? = null,
+    val sent: Int = 0,
+    val delivered: Int = 0,
+    val read: Int = 0,
+    val extraInfo: String? = null
+
+
 ) {
     fun isSentByMe(): Boolean {
-        // If recipient ID and wa_id are equal → it's sent by me
         return recipientId != null && waId != null && recipientId == waId
     }
 }
