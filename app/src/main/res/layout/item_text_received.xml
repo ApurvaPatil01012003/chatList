@@ -36,12 +36,6 @@
                 android:textColor="#666666"
                 android:textSize="10sp" />
 
-            <ImageView
-                android:id="@+id/statusTick"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginStart="4dp"
-                android:src="@drawable/baseline_done_24" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

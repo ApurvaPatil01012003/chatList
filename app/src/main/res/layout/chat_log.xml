@@ -64,6 +64,7 @@
             android:layout_height="wrap_content"
             android:text="Count"
             android:textSize="14sp"
+            android:background="@drawable/count_bg"
             android:gravity="center"
             android:layout_gravity="center_vertical" />
 

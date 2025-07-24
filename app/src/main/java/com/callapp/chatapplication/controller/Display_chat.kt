@@ -232,8 +232,6 @@ class Display_chat : AppCompatActivity() {
         }
 
 
-
-
     }
 
 
@@ -346,7 +344,8 @@ class Display_chat : AppCompatActivity() {
         val inputFields = dialogView.findViewById<LinearLayout>(R.id.inputFieldsLayout)
 
         val templateNames = templateList.map { it.optString("name") }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, templateNames)
+        val adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, templateNames)
         spinnerTemplates.adapter = adapter
 
         var selectedTemplate: JSONObject? = null
@@ -390,7 +389,8 @@ class Display_chat : AppCompatActivity() {
                         editText.isFocusableInTouchMode = true
                         editText.setSelection(editText.text?.length ?: 0)
 
-                        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                        val imm =
+                            getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                         imm.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
 
                         break
@@ -401,6 +401,7 @@ class Display_chat : AppCompatActivity() {
 
         dialog.show()
     }
+
     fun sendTemplateMessage(template: JSONObject, inputs: List<String>) {
         val name = template.optString("name")
         val to = intent.getStringExtra("wa_id_or_sender") ?: return
@@ -414,11 +415,12 @@ class Display_chat : AppCompatActivity() {
         val imageInputsCount = if (hasImageHeader) 1 else 0
         val bodyInputs = inputs.drop(imageInputsCount)
 
-        Log.d("TEMPLATE_INPUTS", "Inputs: $inputs | hasImageHeader: $hasImageHeader")
-        Log.d("TEMPLATE_BODY_INPUTS", "bodyInputs: $bodyInputs | totalPlaceholders: $totalPlaceholders")
-
         if (bodyInputs.size < totalPlaceholders) {
-            Toast.makeText(this, "Please fill all $totalPlaceholders template fields", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Please fill all $totalPlaceholders template fields",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
 
@@ -444,11 +446,12 @@ class Display_chat : AppCompatActivity() {
                             imageUrl = fallbackUrl
                         }
 
-                        Log.d("TEMPLATE_HEADER", "Resolved image URL: $imageUrl")
-
                         if (imageUrl.isNullOrBlank() || !imageUrl.startsWith("http")) {
-                            Toast.makeText(this, "Image URL is required for this template", Toast.LENGTH_SHORT).show()
-                            Log.e("TEMPLATE_ERROR", "Aborting: Invalid image URL: $imageUrl")
+                            Toast.makeText(
+                                this,
+                                "Image URL is required for this template",
+                                Toast.LENGTH_SHORT
+                            ).show()
                             return
                         }
 
@@ -465,7 +468,11 @@ class Display_chat : AppCompatActivity() {
                                 put("parameters", headerParams)
                             })
                         } else {
-                            Toast.makeText(this, "Image URL is required for this template", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this,
+                                "Image URL is required for this template",
+                                Toast.LENGTH_SHORT
+                            ).show()
                             Log.e("TEMPLATE_ERROR", "Aborting: Invalid image URL: $imageUrl")
                             return
                         }
@@ -486,30 +493,46 @@ class Display_chat : AppCompatActivity() {
                     })
                 }
 
-                "BUTTONS" -> {
-                    val buttons = comp.optJSONArray("buttons") ?: continue
+                "BUTTON" -> {
+                    val subType = comp.optString("sub_type")
+                    val index = comp.optInt("index")
 
-                    var btnIndex = 0
-                    for (j in 0 until buttons.length()) {
-                        val btn = buttons.getJSONObject(j)
-                        val btnType = btn.optString("type").lowercase()
-
-                        if (btnType == "phone_number") continue
-
-                        val buttonObj = JSONObject().apply {
-                            put("type", "button")
-                            put("sub_type", btnType)
-                            put("index", btnIndex++)
-                        }
-
-                        if (btnType == "quick_reply") {
-                            buttonObj.put("parameters", JSONArray())
-                            componentsArray.put(buttonObj)
-                        } else if (btnType == "url") {
-                            componentsArray.put(buttonObj)
-                        }
-
+                    val buttonObj = JSONObject().apply {
+                        put("type", "button")
+                        put("sub_type", subType)
+                        put("index", index)
                     }
+
+                    if (subType == "url") {
+                        val urlContainsPlaceholder = comp.optJSONObject("example")
+                            ?.optJSONArray("parameters")
+                            ?.optString(0)
+                            ?.contains("{{") == true
+
+                        if (urlContainsPlaceholder) {
+                            // If it's a dynamic URL, you must provide text param
+                            val placeholderParam = comp.optJSONObject("example")
+                                ?.optJSONArray("parameters")
+                                ?.optString(0)
+
+                            if (!placeholderParam.isNullOrBlank()) {
+                                val parameters = JSONArray().apply {
+                                    put(JSONObject().apply {
+                                        put("type", "text")
+                                        put("text", placeholderParam)
+                                    })
+                                }
+                                buttonObj.put("parameters", parameters)
+                            }
+                        }
+                        // 🚫 Do NOT include "parameters" if it's a static link
+                    }
+
+                    if (subType == "quick_reply") {
+                        buttonObj.put("parameters", JSONArray()) // Always required
+                    }
+
+                    componentsArray.put(buttonObj)
                 }
 
 
@@ -555,7 +578,6 @@ class Display_chat : AppCompatActivity() {
 
         Volley.newRequestQueue(this).add(request)
     }
-
 
 
     fun renderTemplateUI(
@@ -627,14 +649,30 @@ class Display_chat : AppCompatActivity() {
                             userInputs[0] = defaultImageUrl
                         }
 
-                        Log.d("TEMPLATE_UI", "Default image URL set in userInputs[0]: $defaultImageUrl")
+                        Log.d(
+                            "TEMPLATE_UI",
+                            "Default image URL set in userInputs[0]: $defaultImageUrl"
+                        )
 
                         imageEditText.addTextChangedListener(object : TextWatcher {
                             override fun afterTextChanged(s: Editable?) {}
-                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                            override fun beforeTextChanged(
+                                s: CharSequence?,
+                                start: Int,
+                                count: Int,
+                                after: Int
+                            ) {
+                            }
+
+                            override fun onTextChanged(
+                                s: CharSequence?,
+                                start: Int,
+                                before: Int,
+                                count: Int
+                            ) {
                                 val enteredUrl = s.toString().trim()
-                                userImageUrl = if (enteredUrl.isNotEmpty()) enteredUrl else defaultImageUrl
+                                userImageUrl =
+                                    if (enteredUrl.isNotEmpty()) enteredUrl else defaultImageUrl
 
                                 if (userInputs.size > 0) userInputs[0] = userImageUrl ?: ""
                                 else userInputs.add(0, userImageUrl ?: "")
@@ -661,7 +699,8 @@ class Display_chat : AppCompatActivity() {
                     val matches = placeholderRegex.findAll(bodyText).toList()
 
                     // Determine starting index for body inputs
-                    val startIndex = if (userInputs.isNotEmpty() && userInputs[0].startsWith("http")) 1 else 0
+                    val startIndex =
+                        if (userInputs.isNotEmpty() && userInputs[0].startsWith("http")) 1 else 0
 
                     // Ensure enough space in userInputs
                     for (i in 0 until matches.size) {
@@ -699,14 +738,27 @@ class Display_chat : AppCompatActivity() {
 
                         editText.addTextChangedListener(object : TextWatcher {
                             override fun afterTextChanged(s: Editable?) {}
-                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                            override fun beforeTextChanged(
+                                s: CharSequence?,
+                                start: Int,
+                                count: Int,
+                                after: Int
+                            ) {
+                            }
+
+                            override fun onTextChanged(
+                                s: CharSequence?,
+                                start: Int,
+                                before: Int,
+                                count: Int
+                            ) {
                                 userInputs[actualIndex] = s.toString()
 
                                 var updated = bodyText
                                 matches.forEachIndexed { j, m ->
                                     val idx = startIndex + j
-                                    updated = updated.replace(m.value, userInputs.getOrNull(idx) ?: "")
+                                    updated =
+                                        updated.replace(m.value, userInputs.getOrNull(idx) ?: "")
                                 }
                                 preview.text = updated
                             }
@@ -789,7 +841,7 @@ class Display_chat : AppCompatActivity() {
                         else -> obj.optString("message_body", "")
                     }
 
-                  //  val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
+                    //  val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
                     var imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
 
                     if (messageType == "template" && imageUrl.isNullOrEmpty()) {
@@ -801,7 +853,10 @@ class Display_chat : AppCompatActivity() {
                                 Log.d("DEBUG_EXTRA", "Raw extra_info string: $extraInfoStr")
                                 val extraInfo = JSONObject(extraInfoStr)
                                 val components = extraInfo.optJSONArray("components")
-                                Log.d("DEBUG_EXTRA", "Found components length: ${components?.length()}")
+                                Log.d(
+                                    "DEBUG_EXTRA",
+                                    "Found components length: ${components?.length()}"
+                                )
 
 
                                 val header = (0 until (components?.length() ?: 0))
@@ -844,7 +899,11 @@ class Display_chat : AppCompatActivity() {
                         timestamp = timestamp,
                         url = imageUrl,
                         recipientId = recipientId,
-                        waId = waId
+                        waId = waId,
+                        extraInfo = obj.optString("extra_info"),
+                        sent = obj.optInt("sent", 0),
+                        delivered = obj.optInt("delivered", 0),
+                        read = obj.optInt("read", 0)
                     )
 
 

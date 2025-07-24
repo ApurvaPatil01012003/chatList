@@ -45,7 +45,9 @@
                 android:layout_height="16dp"
                 android:layout_marginStart="4dp"
                 android:src="@drawable/baseline_done_24"
+                android:visibility="visible"
                 app:tint="@color/black" />
+
         </LinearLayout>
 
     </LinearLayout>

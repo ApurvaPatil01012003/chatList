@@ -49,6 +49,15 @@ class ChatAdapter(
         holder.txtMsgCnt.text = "${chat.message_count} Messages"
         holder.txtInitial.text = getInitialsFromName(name)
         holder.activeDot.visibility = if (chat.active_last_24_hours) View.VISIBLE else View.GONE
+        if (chat.active_last_24_hours){
+            holder.txtInitial.setBackgroundResource(R.drawable.bg_circle_initial)
+        }
+        else
+        {
+            holder.txtInitial.setBackgroundResource(R.drawable.bg_circle_initial_gray)
+        }
+
+
     }
 
     override fun getItemCount(): Int = filteredList.size
