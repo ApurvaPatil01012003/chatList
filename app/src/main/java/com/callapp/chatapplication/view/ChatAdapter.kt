@@ -66,8 +66,6 @@ class ChatAdapter(
         chats = newList
         originalList = newList.toMutableList()
         filteredList = newList.toMutableList()
-
-        Log.d("ChatAdapter", "Updating chat list: ${newList.size}")
         newList.forEach {
             Log.d("ChatAdapter", "Chat item: ${it.contact_name} | ${it.wa_id_or_sender}")
         }
@@ -89,7 +87,6 @@ class ChatAdapter(
             }.toMutableList()
         }
 
-        Log.d("ChatAdapter", "Filtered list size: ${filteredList.size}")
         notifyDataSetChanged()
     }
 

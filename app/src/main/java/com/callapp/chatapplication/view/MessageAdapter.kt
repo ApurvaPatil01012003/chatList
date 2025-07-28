@@ -1,7 +1,7 @@
 package com.callapp.chatapplication.view
 
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
+
+import android.content.Context
 import android.text.Html
 import android.text.Spanned
 import android.util.Log
@@ -18,8 +18,7 @@ import com.callapp.chatapplication.R
 import com.callapp.chatapplication.model.Message
 import org.json.JSONObject
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 class MessageAdapter(
     private var messages: List<Message>,
@@ -39,18 +38,22 @@ class MessageAdapter(
         messages = newList
         notifyDataSetChanged()
     }
-
     override fun getItemViewType(position: Int): Int {
         val message = messages[position]
+        Log.d("BINDING", "Type: ${message.messageType}, SentByMe: ${message.isSentByMe()}, URL: ${message.url}")
+
         return when {
             message.messageType == "image" && message.isSentByMe() -> TYPE_IMAGE_SENT
             message.messageType == "image" && !message.isSentByMe() -> TYPE_IMAGE_RECEIVED
             message.messageType == "template" && message.isSentByMe() && !message.url.isNullOrEmpty() -> TYPE_TEMPLATE_IMAGE_SENT
+
             message.messageType == "template" && !message.isSentByMe() && !message.url.isNullOrEmpty() -> TYPE_TEMPLATE_IMAGE_RECEIVED
             (message.messageType == "text" || message.messageType == "template") && message.isSentByMe() -> TYPE_TEXT_SENT
             else -> TYPE_TEXT_RECEIVED
         }
     }
+
+
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val layoutId = when (viewType) {
@@ -77,98 +80,98 @@ class MessageAdapter(
         val message = messages[position]
 
         if (holder is TextViewHolder) {
-            holder.textView.text = formatMessageText(message.messageBody ?: "")
-            holder.timestampTextView.text = formatTimestamp(message.timestamp)
+            bindTextViewHolder(holder, message)
+        } else if (holder is ImageViewHolder) {
+            bindImageViewHolder(holder, message)
+        }
+    }
 
-            if (message.isSentByMe()) {
-                val statusIcon = when {
-                    message.read == 1 -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.blue))
-                        R.drawable.baseline_done_readall_24
-                    }
-                    message.delivered == 1 -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.black))
-                        R.drawable.baseline_done_all_24
-                    }
-                    message.sent == 1 -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.black))
-                        R.drawable.baseline_done_24
-                    }
-                    else -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.black))
-                        R.drawable.baseline_done_24
-                    }
-                }
-                holder.tickImageView?.setImageResource(statusIcon)
-            }
+    private fun bindTextViewHolder(holder: TextViewHolder, message: Message) {
+        holder.textView.text = formatMessageText(message.messageBody ?: "")
+        holder.buttonContainer?.removeAllViews()
+        holder.timestampTextView.text = formatTimestamp(message.timestamp)
+        renderStatusIcon(holder.tickImageView, message, holder.itemView)
+        holder.failedLabel.visibility = if (message.sender == "you" && message.sent == 0) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+    }
 
+    private fun bindImageViewHolder(holder: ImageViewHolder, message: Message) {
+        holder.timestampTextView.text = formatTimestamp(message.timestamp)
+        holder.buttonContainer?.removeAllViews()
+        renderStatusIcon(holder.tickImageView, message, holder.itemView)
 
-            Log.d("MSG_STATUS", "read=${message.read}, delivered=${message.delivered}, sent=${message.sent}")
+        val imageUrl = resolveImageUrl(message)?.also {
+            message.url = it
         }
 
-        else if (holder is ImageViewHolder) {
-            holder.timestampTextView.text = formatTimestamp(message.timestamp)
+        Log.d("IMAGE_BIND", "Resolved URL: $imageUrl for type: ${message.messageType}")
 
-            if (message.isSentByMe()) {
-                val statusIcon = when {
-                    message.read == 1 -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.blue))
-                        R.drawable.baseline_done_readall_24
-                    }
-                    message.delivered == 1 -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.black))
-                        R.drawable.baseline_done_all_24
-                    }
-                    message.sent == 1 -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.black))
-                        R.drawable.baseline_done_24
-                    }
-                    else -> {
-                        holder.tickImageView?.setColorFilter(ContextCompat.getColor(holder.itemView.context, R.color.black))
-                        R.drawable.baseline_done_24
-                    }
+
+        val templateTextView = holder.itemView.findViewById<TextView?>(R.id.imgMessage)
+        templateTextView?.text = formatMessageText(message.messageBody ?: "")
+
+        if (!imageUrl.isNullOrEmpty()) {
+            holder.imageView.visibility = View.VISIBLE
+            Glide.with(holder.itemView.context)
+                .load(imageUrl)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .into(holder.imageView)
+        } else {
+            holder.imageView.setImageDrawable(null)
+            holder.imageView.visibility = View.GONE
+        }
+
+
+    }
+
+    private fun resolveImageUrl(message: Message): String? {
+        if (!message.url.isNullOrBlank()) return message.url
+
+        try {
+            val json = JSONObject(message.extraInfo ?: "{}")
+            val mediaId = json.optString("media_id")
+            if (!mediaId.isNullOrBlank()) {
+                val prefs = parentView.context.getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+
+                val cachedUrl = prefs.getString(mediaId, null)
+                if (!cachedUrl.isNullOrBlank()) {
+                    Log.d("IMAGE_CACHE", "Restored for template mediaId=$mediaId → $cachedUrl")
+                    return cachedUrl
                 }
-                holder.tickImageView?.setImageResource(statusIcon)
             }
 
 
-
-            val urlFromExtra = extractImageFromExtraInfo(message.extraInfo)
-            val imageUrl = message.url.takeIf { !it.isNullOrEmpty() } ?: urlFromExtra.also { message.url = it }
-
-            val templateTextView = holder.itemView.findViewById<TextView?>(R.id.imgMessage)
-            val imageContainer = holder.itemView.findViewById<ViewGroup?>(R.id.templateContainer)
-
-            if (!urlFromExtra.isNullOrEmpty()) {
-                holder.imageView.visibility = View.VISIBLE
-                imageContainer?.visibility = View.VISIBLE
-
-                Glide.with(holder.itemView.context)
-                    .load(urlFromExtra)
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .into(object : com.bumptech.glide.request.target.CustomTarget<Drawable>() {
-                        override fun onResourceReady(resource: Drawable, transition: com.bumptech.glide.request.transition.Transition<in Drawable>?) {
-                            holder.imageView.setImageDrawable(resource)
-                            holder.imageView.visibility = View.VISIBLE
-                        }
-
-                        override fun onLoadCleared(placeholder: Drawable?) {
-                            holder.imageView.setImageDrawable(placeholder)
-                            holder.imageView.visibility = View.GONE
-                        }
-
-                        override fun onLoadFailed(errorDrawable: Drawable?) {
-                            holder.imageView.setImageDrawable(errorDrawable)
-                            holder.imageView.visibility = View.GONE
-                        }
-                    })
-            } else {
-                holder.imageView.setImageDrawable(null)
-                holder.imageView.visibility = View.GONE
-                imageContainer?.visibility = View.VISIBLE
+            val components = json.optJSONArray("components") ?: return null
+            for (i in 0 until components.length()) {
+                val component = components.getJSONObject(i)
+                if (component.optString("type") == "header") {
+                    val parameters = component.optJSONArray("parameters")
+                    val imgObj = parameters?.optJSONObject(0)?.optJSONObject("image")
+                    return imgObj?.optString("link")
+                }
             }
 
-            templateTextView?.text = formatMessageText(message.messageBody ?: "")
+        } catch (e: Exception) {
+            Log.e("IMAGE_RESOLVE", "Failed to resolve image for template", e)
+        }
+
+        return null
+    }
+
+    private fun renderStatusIcon(tickImageView: ImageView?, message: Message, itemView: View) {
+        if (message.isSentByMe()) {
+            val statusIcon = when {
+                message.read == 1 -> R.drawable.baseline_done_readall_24
+                message.delivered == 1 -> R.drawable.baseline_done_all_24
+                message.sent == 1 -> R.drawable.baseline_done_24
+                else -> R.drawable.baseline_done_24
+            }
+            val color = if (message.read == 1) R.color.blue else R.color.black
+            tickImageView?.setColorFilter(ContextCompat.getColor(itemView.context, color))
+            tickImageView?.setImageResource(statusIcon)
         }
     }
 
@@ -176,25 +179,30 @@ class MessageAdapter(
         val textView: TextView = view.findViewById(R.id.textMessage)
         val timestampTextView: TextView = view.findViewById(R.id.timestampText)
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
+        val buttonContainer: ViewGroup? = view.findViewById(R.id.buttonContainer)
+        val failedLabel: TextView = view.findViewById(R.id.failedLabel)
     }
 
     inner class ImageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val imageView: ImageView
+        val imageView: ImageView = view.findViewById(R.id.imageMessage)
+            ?: view.findViewById(R.id.imageTemplate)
+            ?: throw IllegalStateException("ImageView not found!")
         val timestampTextView: TextView = view.findViewById(R.id.timestampText)
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
-
-        init {
-            imageView = view.findViewById(R.id.imageMessage)
-                ?: view.findViewById(R.id.imageTemplate)
-                        ?: throw IllegalStateException("ImageView not found!")
-        }
+        var buttonContainer: ViewGroup? = view.findViewById(R.id.buttonContainer)
     }
 
+
     fun addMessage(message: Message) {
+        if (message.messageType == "template" && message.url.isNullOrEmpty()) {
+            message.url = extractImageFromExtraInfo(message.extraInfo)
+        }
         val newList = messages.toMutableList()
         newList.add(message)
         setMessages(newList)
     }
+
+
 
     fun formatMessageText(rawText: String): Spanned {
         val html = rawText
@@ -213,9 +221,10 @@ class MessageAdapter(
         val messageDay = dateFormat.format(messageDate)
         val currentDay = dateFormat.format(now)
 
-        val calendar = java.util.Calendar.getInstance()
-        calendar.time = now
-        calendar.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        val calendar = Calendar.getInstance().apply {
+            time = now
+            add(Calendar.DAY_OF_YEAR, -1)
+        }
         val yesterdayDay = dateFormat.format(calendar.time)
 
         val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -224,23 +233,18 @@ class MessageAdapter(
         val dayLabel = when (messageDay) {
             currentDay -> "Today"
             yesterdayDay -> "Yesterday"
-            else -> {
-                val fullDateFormat = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault())
-                fullDateFormat.format(messageDate)
-            }
+            else -> SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()).format(messageDate)
         }
 
         return "$time  |  $dayLabel"
     }
 
-
     fun extractImageFromExtraInfo(extraInfo: String?): String? {
-        if (extraInfo.isNullOrEmpty()) return null
+        if (extraInfo.isNullOrEmpty() || extraInfo == "null") return null
 
         return try {
             val json = JSONObject(extraInfo)
             val components = json.optJSONArray("components") ?: return null
-
             for (i in 0 until components.length()) {
                 val component = components.getJSONObject(i)
                 if (component.optString("type") == "header") {
@@ -260,4 +264,6 @@ class MessageAdapter(
             null
         }
     }
+
+
 }

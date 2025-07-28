@@ -2,7 +2,12 @@ package com.callapp.chatapplication.controller
 
 import android.app.Dialog
 import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.net.Uri
+import android.view.Gravity
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
@@ -10,14 +15,17 @@ import android.text.TextWatcher
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.webkit.MimeTypeMap
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -28,6 +36,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.android.volley.Request
+import com.android.volley.Response
 import com.android.volley.toolbox.JsonArrayRequest
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
@@ -46,6 +55,9 @@ class Display_chat : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MessageAdapter
     val phoneNumberId = "361462453714220"
+    private lateinit var waId: String
+    private var isActiveLast24Hours: Boolean = true
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,9 +71,15 @@ class Display_chat : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+        isActiveLast24Hours = intent.getBooleanExtra("active_last_24_hours", true)
+
 
         val name = intent.getStringExtra("contact_name")
         var number = intent.getStringExtra("wa_id_or_sender")
+        waId = intent.getStringExtra("wa_id_or_sender") ?: ""
+        Log.d("WAID_CHECK", "Assigned waId: $waId")
+
+
         setSupportActionBar(binding.toolbar)
 
 
@@ -78,135 +96,145 @@ class Display_chat : AppCompatActivity() {
 
         binding.buttonSend.setOnClickListener {
             val text = binding.editTextMessage.text.toString().trim()
-            val currentContactWaId = intent.getStringExtra("wa_id_or_sender") ?: ""
-
-
+            val waId = intent.getStringExtra("wa_id_or_sender") ?: return@setOnClickListener
             val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
 
             if (text.isNotEmpty()) {
+                val isSent = if (isActiveLast24Hours) 1 else 0
+
+                val msg = Message(
+                    sender = "you",
+                    messageBody = text,
+                    messageType = "text",
+                    timestamp = System.currentTimeMillis() / 1000,
+                    url = null,
+                    recipientId = waId,
+                    waId = waId,
+                    extraInfo = null,
+                    sent = isSent
+                )
+
+                adapter.addMessage(msg)
+                binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
+                binding.editTextMessage.setText("")
+
+                if (!isActiveLast24Hours) {
+                    Toast.makeText(this, "Message failed: Contact inactive for 24+ hours", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 sendTextMessage(
-                    to = currentContactWaId,
+                    to = waId,
                     text = text,
                     phoneNumberId = phoneNumberId,
                     accessToken = accessToken,
                     onSuccess = {
                         Toast.makeText(this, "Message Sent", Toast.LENGTH_SHORT).show()
-                        binding.editTextMessage.setText("")
-                        val sentMessage = Message(
-                            sender = "you",
-                            messageBody = text,
-                            messageType = "text",
-                            timestamp = System.currentTimeMillis() / 1000,
-                            url = null,
-                            recipientId = currentContactWaId,
-                            waId = currentContactWaId
-                        )
-
-                        adapter.addMessage(sentMessage)
-                        binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
-
                     },
                     onError = {
-                        Toast.makeText(this, it, Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "Send failed", Toast.LENGTH_SHORT).show()
                     }
                 )
             }
         }
+
+
         number = intent.getStringExtra("wa_id_or_sender") ?: ""
 
         if (number.isNotEmpty()) {
             val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/1"
 
-            val request = JsonArrayRequest(Request.Method.GET, url, null,
-                { response ->
-                    val messages = mutableListOf<Message>()
-                    for (i in 0 until response.length()) {
-                        val obj = response.getJSONObject(i)
+//            val request = JsonArrayRequest(Request.Method.GET, url, null,
+//                { response ->
+//                    val messages = mutableListOf<Message>()
+//                    for (i in 0 until response.length()) {
+//                        val obj = response.getJSONObject(i)
+//
+//                        val messageType = obj.optString("message_type") ?: "text"
+//                        //val messageBody = obj.optString("message_body")
+//
+//                        val messageBody = when (messageType) {
+//                            "template" -> {
+//                                val extraInfoStr = obj.optString("extra_info")
+//                                if (extraInfoStr.isNotEmpty()) {
+//                                    try {
+//                                        val extraInfo = JSONObject(extraInfoStr)
+//                                        val name = extraInfo.optString("name")
+//                                        val components = extraInfo.optJSONArray("components")
+//
+//                                        // Get the body component
+//                                        val body = (0 until (components?.length() ?: 0))
+//                                            .mapNotNull { components?.optJSONObject(it) }
+//                                            .firstOrNull { it.optString("type") == "body" }
+//
+//                                        val params = body?.optJSONArray("parameters")
+//                                        val values = (0 until (params?.length() ?: 0)).map { i ->
+//                                            params!!.getJSONObject(i).optString("text")
+//                                        }
+//
+//                                        // Now get original body text from templates map
+//                                        val templateText = templateBodyMap[name] ?: name
+//
+//                                        // Replace {{1}}, {{2}}, ... with values
+//                                        var rendered = templateText
+//                                        values.forEachIndexed { index, v ->
+//                                            rendered = rendered.replace("{{${index + 1}}}", v)
+//                                        }
+//                                        rendered
+//                                    } catch (e: Exception) {
+//                                        "Template Message"
+//                                    }
+//                                } else {
+//                                    "Template Message"
+//                                }
+//                            }
+//
+//                            else -> obj.optString("message_body", "")
+//                        }
+//
+//                        val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
+//                        val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
+//
+//                        if (messageBody.isNullOrEmpty() && messageType != "image") {
+//                            continue
+//                        }
+//                        val sender = obj.optString("sender")
+//                        val recipientId = obj.optString("recipient_id")
+//                        val waId = obj.optString("wa_id")
+//
+//                        val message = Message(
+//                            sender = if (sender.isNullOrEmpty()) null else sender,
+//                            messageBody = messageBody,
+//                            messageType = messageType,
+//                            timestamp = timestamp,
+//                            url = imageUrl,
+//                            recipientId = recipientId,
+//                            waId = waId,
+//                            extraInfo = obj.optString("extra_info"),
+//                            sent = obj.optInt("sent", 0),
+//                            delivered = obj.optInt("delivered", 0),
+//                            read = obj.optInt("read", 0)
+//                        )
+//
+//
+//
+//                        messages.add(message)
+//                    }
+//
+//                    // Show latest messages at bottom
+//                    messages.reverse()
+//                    adapter.setMessages(messages)
+//
+//                    // Smooth scroll
+//                    binding.recyclerViewMessages.post {
+//                        binding.recyclerViewMessages.scrollToPosition(messages.size - 1)
+//                    }
+//                },
+//                { error ->
+//                    Log.e("Volley", "Error loading messages", error)
+//                    Toast.makeText(this, "Failed to load messages", Toast.LENGTH_SHORT).show()
+//                })
 
-                        val messageType = obj.optString("message_type") ?: "text"
-                        //val messageBody = obj.optString("message_body")
-
-                        val messageBody = when (messageType) {
-                            "template" -> {
-                                val extraInfoStr = obj.optString("extra_info")
-                                if (extraInfoStr.isNotEmpty()) {
-                                    try {
-                                        val extraInfo = JSONObject(extraInfoStr)
-                                        val name = extraInfo.optString("name")
-                                        val components = extraInfo.optJSONArray("components")
-
-                                        // Get the body component
-                                        val body = (0 until (components?.length() ?: 0))
-                                            .mapNotNull { components?.optJSONObject(it) }
-                                            .firstOrNull { it.optString("type") == "body" }
-
-                                        val params = body?.optJSONArray("parameters")
-                                        val values = (0 until (params?.length() ?: 0)).map { i ->
-                                            params!!.getJSONObject(i).optString("text")
-                                        }
-
-                                        // Now get original body text from templates map
-                                        val templateText = templateBodyMap[name] ?: name
-
-                                        // Replace {{1}}, {{2}}, ... with values
-                                        var rendered = templateText
-                                        values.forEachIndexed { index, v ->
-                                            rendered = rendered.replace("{{${index + 1}}}", v)
-                                        }
-                                        rendered
-                                    } catch (e: Exception) {
-                                        "Template Message"
-                                    }
-                                } else {
-                                    "Template Message"
-                                }
-                            }
-
-                            else -> obj.optString("message_body", "")
-                        }
-
-                        val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
-                        val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
-
-                        if (messageBody.isNullOrEmpty() && messageType != "image") {
-                            continue
-                        }
-                        val sender = obj.optString("sender")
-                        val recipientId = obj.optString("recipient_id")
-                        val waId = obj.optString("wa_id")
-
-                        val message = Message(
-                            sender = if (sender.isNullOrEmpty()) null else sender,
-                            messageBody = messageBody,
-                            messageType = messageType,
-                            timestamp = timestamp,
-                            url = imageUrl,
-                            recipientId = recipientId,
-                            waId = waId,
-                            sent = obj.optInt("sent", 0),
-                            delivered = obj.optInt("delivered", 0),
-                            read = obj.optInt("read", 0)
-                        )
-
-
-                        messages.add(message)
-                    }
-
-                    // Show latest messages at bottom
-                    messages.reverse()
-                    adapter.setMessages(messages)
-
-                    // Smooth scroll
-                    binding.recyclerViewMessages.post {
-                        binding.recyclerViewMessages.scrollToPosition(messages.size - 1)
-                    }
-                },
-                { error ->
-                    Log.e("Volley", "Error loading messages", error)
-                    Toast.makeText(this, "Failed to load messages", Toast.LENGTH_SHORT).show()
-                })
-
-            Volley.newRequestQueue(this).add(request)
+        //    Volley.newRequestQueue(this).add(request)
         } else {
             Toast.makeText(this, "Invalid contact selected.", Toast.LENGTH_SHORT).show()
             finish()
@@ -229,6 +257,10 @@ class Display_chat : AppCompatActivity() {
                 Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
 
             })
+        }
+
+        binding.buttonAttach.setOnClickListener {
+            showAttachmentPopup()
         }
 
 
@@ -317,10 +349,16 @@ class Display_chat : AppCompatActivity() {
                 }
 
                 onResult(result) // result can be used for template dialog
+                Log.d("TEMPLATE_MAP_SIZE", "templateBodyMap size: ${templateBodyMap.size}")
+                Log.d("TEMPLATE_KEYS", "templateBodyMap keys: ${templateBodyMap.keys}")
+
                 loadMessages()
             },
             { error ->
                 onError(error.message ?: "Template fetch failed")
+                Log.d("TEMPLATE_MAP_SIZE", "templateBodyMap size: ${templateBodyMap.size}")
+                Log.d("TEMPLATE_KEYS", "templateBodyMap keys: ${templateBodyMap.keys}")
+
                 loadMessages() // fallback load even if templates failed
             }
         )
@@ -401,7 +439,6 @@ class Display_chat : AppCompatActivity() {
 
         dialog.show()
     }
-
     fun sendTemplateMessage(template: JSONObject, inputs: List<String>) {
         val name = template.optString("name")
         val to = intent.getStringExtra("wa_id_or_sender") ?: return
@@ -415,19 +452,12 @@ class Display_chat : AppCompatActivity() {
         val imageInputsCount = if (hasImageHeader) 1 else 0
         val bodyInputs = inputs.drop(imageInputsCount)
 
-        if (bodyInputs.size < totalPlaceholders) {
-            Toast.makeText(
-                this,
-                "Please fill all $totalPlaceholders template fields",
-                Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-
-        if (bodyInputs.any { it.isBlank() }) {
+        if (bodyInputs.size < totalPlaceholders || bodyInputs.any { it.isBlank() }) {
             Toast.makeText(this, "Please fill all template fields", Toast.LENGTH_SHORT).show()
             return
         }
+
+        var headerImageUrl: String? = null
 
         for (i in 0 until componentsArr.length()) {
             val comp = componentsArr.getJSONObject(i)
@@ -437,7 +467,6 @@ class Display_chat : AppCompatActivity() {
                 "HEADER" -> {
                     if (comp.optString("format") == "IMAGE") {
                         var imageUrl = inputs.getOrNull(0)?.trim()
-
                         val fallbackUrl = comp.optJSONObject("example")
                             ?.optJSONArray("header_handle")
                             ?.optString(0)
@@ -447,35 +476,23 @@ class Display_chat : AppCompatActivity() {
                         }
 
                         if (imageUrl.isNullOrBlank() || !imageUrl.startsWith("http")) {
-                            Toast.makeText(
-                                this,
-                                "Image URL is required for this template",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            Toast.makeText(this, "Valid image URL required", Toast.LENGTH_SHORT).show()
                             return
                         }
 
+                        headerImageUrl = imageUrl // save for display
 
-                        if (!imageUrl.isNullOrBlank() && imageUrl.startsWith("http")) {
-                            val headerParams = JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("type", "image")
-                                    put("image", JSONObject().put("link", imageUrl))
-                                })
-                            }
-                            componentsArray.put(JSONObject().apply {
-                                put("type", "header")
-                                put("parameters", headerParams)
+                        val headerParams = JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("type", "image")
+                                put("image", JSONObject().put("link", imageUrl))
                             })
-                        } else {
-                            Toast.makeText(
-                                this,
-                                "Image URL is required for this template",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            Log.e("TEMPLATE_ERROR", "Aborting: Invalid image URL: $imageUrl")
-                            return
                         }
+
+                        componentsArray.put(JSONObject().apply {
+                            put("type", "header")
+                            put("parameters", headerParams)
+                        })
                     }
                 }
 
@@ -504,42 +521,28 @@ class Display_chat : AppCompatActivity() {
                     }
 
                     if (subType == "url") {
-                        val urlContainsPlaceholder = comp.optJSONObject("example")
+                        val placeholderParam = comp.optJSONObject("example")
                             ?.optJSONArray("parameters")
                             ?.optString(0)
-                            ?.contains("{{") == true
 
-                        if (urlContainsPlaceholder) {
-                            // If it's a dynamic URL, you must provide text param
-                            val placeholderParam = comp.optJSONObject("example")
-                                ?.optJSONArray("parameters")
-                                ?.optString(0)
-
-                            if (!placeholderParam.isNullOrBlank()) {
-                                val parameters = JSONArray().apply {
-                                    put(JSONObject().apply {
-                                        put("type", "text")
-                                        put("text", placeholderParam)
-                                    })
-                                }
-                                buttonObj.put("parameters", parameters)
-                            }
+                        if (!placeholderParam.isNullOrBlank() && placeholderParam.contains("{{")) {
+                            buttonObj.put("parameters", JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("type", "text")
+                                    put("text", placeholderParam)
+                                })
+                            })
                         }
-                        // 🚫 Do NOT include "parameters" if it's a static link
                     }
 
                     if (subType == "quick_reply") {
-                        buttonObj.put("parameters", JSONArray()) // Always required
+                        buttonObj.put("parameters", JSONArray())
                     }
 
                     componentsArray.put(buttonObj)
                 }
-
-
-
             }
         }
-
 
         val payload = JSONObject().apply {
             put("messaging_product", "whatsapp")
@@ -559,13 +562,41 @@ class Display_chat : AppCompatActivity() {
             { response ->
                 Log.d("TEMPLATE_SEND", "Success: $response")
                 Toast.makeText(this, "Template sent", Toast.LENGTH_SHORT).show()
-                loadMessages()
+
+                // Save template image URL in prefs with a unique key
+                val mediaId = "template_header_${System.currentTimeMillis()}"
+                if (!headerImageUrl.isNullOrBlank()) {
+                    getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+                        .edit().putString(mediaId, headerImageUrl).apply()
+                }
+
+                val renderedText = renderBody(templateBodyMap[name], bodyInputs)
+
+                val extraInfoJson = JSONObject().apply {
+                    put("name", name)
+                    put("components", componentsArray)
+                    put("media_id", mediaId)
+                }
+
+                val message = Message(
+                    sender = "you",
+                    messageBody = renderedText,
+                    messageType = "template",
+                    timestamp = System.currentTimeMillis() / 1000,
+                    url = headerImageUrl,
+                    recipientId = to,
+                    waId = to,
+                    extraInfo = extraInfoJson.toString(),
+                    sent = 1
+                )
+
+                adapter.addMessage(message)
+                binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
             },
             { error ->
                 val errData = error.networkResponse?.data?.let { String(it) }
                 Log.e("TEMPLATE_SEND", "Error: $errData")
                 Toast.makeText(this, "Send failed: $errData", Toast.LENGTH_LONG).show()
-                loadMessages()
             }
         ) {
             override fun getHeaders(): MutableMap<String, String> {
@@ -577,6 +608,13 @@ class Display_chat : AppCompatActivity() {
         }
 
         Volley.newRequestQueue(this).add(request)
+    }
+
+    fun renderBody(templateBody: String?, values: List<String>): String {
+        if (templateBody.isNullOrBlank()) return ""
+        return values.foldIndexed(templateBody) { index, acc, v ->
+            acc.replace("{{${index + 1}}}", v)
+        }
     }
 
 
@@ -600,6 +638,7 @@ class Display_chat : AppCompatActivity() {
         for (i in 0 until components.length()) {
             val comp = components.optJSONObject(i)
             val type = comp.optString("type")
+            Log.d("TEMPLATE_UI", "Processing component type: $type")
 
             when (type) {
                 "HEADER" -> {
@@ -698,19 +737,15 @@ class Display_chat : AppCompatActivity() {
                     val placeholderRegex = Regex("\\{\\{(\\d+)\\}\\}")
                     val matches = placeholderRegex.findAll(bodyText).toList()
 
-                    // Determine starting index for body inputs
                     val startIndex =
                         if (userInputs.isNotEmpty() && userInputs[0].startsWith("http")) 1 else 0
 
-                    // Ensure enough space in userInputs
                     for (i in 0 until matches.size) {
                         val defaultValue = exampleArray?.optString(i) ?: ""
                         val index = startIndex + i
                         if (userInputs.size <= index) userInputs.add(defaultValue)
                         else userInputs[index] = defaultValue
                     }
-
-                    // Fill preview
                     var previewText = bodyText
                     matches.forEachIndexed { i, match ->
                         val value = userInputs.getOrNull(startIndex + i) ?: ""
@@ -779,18 +814,205 @@ class Display_chat : AppCompatActivity() {
                 }
 
                 "BUTTONS" -> {
-                    val buttons = comp.optJSONArray("buttons") ?: JSONArray()
-                    for (b in 0 until buttons.length()) {
-                        val btn = buttons.getJSONObject(b)
-                        val button = Button(context).apply {
-                            text = btn.optString("text", "Action")
+                    val buttons = comp.optJSONArray("buttons")
+                    Log.d(
+                        "TEMPLATE_UI",
+                        "BUTTONS component found, buttons length: ${buttons?.length() ?: 0}"
+                    )
+
+                    if (buttons != null) {
+                        for (b in 0 until buttons.length()) {
+                            val btn = buttons.getJSONObject(b)
+                            val buttonText = btn.optString("text", "Action")
+                            Log.d("TEMPLATE_UI", "Rendering button #$b: $buttonText")
+
+                            val button = Button(context).apply {
+                                text = buttonText
+                            }
+                            layout.addView(button)
                         }
-                        layout.addView(button)
+                    } else {
+                        Log.w(
+                            "TEMPLATE_UI",
+                            "BUTTONS component present but 'buttons' array is null"
+                        )
                     }
+
                 }
             }
         }
     }
+//
+//    fun loadMessages() {
+//        val number = intent.getStringExtra("wa_id_or_sender") ?: return
+//        val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/1"
+//
+//        val request = JsonArrayRequest(Request.Method.GET, url, null,
+//            { response ->
+//                val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+//                val messages = mutableListOf<Message>()
+//
+//                for (i in 0 until response.length()) {
+//                    val obj = response.getJSONObject(i)
+//                    val extraInfoStr = obj.optString("extra_info")
+//                    val messageType = obj.optString("message_type") ?: "text"
+//
+//                    val messageBody = when (messageType) {
+//                        "template" -> {
+//                            if (extraInfoStr.isNotEmpty()) {
+//                                try {
+//                                    val extraInfo = JSONObject(extraInfoStr)
+//                                    val name = extraInfo.optString("name")
+//                                    val components = extraInfo.optJSONArray("components")
+//                                    val body = (0 until (components?.length() ?: 0))
+//                                        .mapNotNull { components?.optJSONObject(it) }
+//                                        .firstOrNull { it.optString("type") == "body" }
+//
+//                                    val params = body?.optJSONArray("parameters")
+//                                    val values = (0 until (params?.length() ?: 0)).map { i ->
+//                                        params!!.getJSONObject(i).optString("text")
+//                                    }
+//
+//                                    val templateText = templateBodyMap[name] ?: name
+//                                    Log.d("TEMPLATE_MATCH", "Looking for name=$name in templateBodyMap, found=$templateText")
+//
+//                                    val rendered = values.foldIndexed(templateText) { index, acc, v ->
+//                                        acc.replace("{{${index + 1}}}", v)
+//                                    }
+//                                    rendered
+//                                } catch (e: Exception) {
+//                                    Log.e("TEMPLATE_ERR", "Template parse failed", e)
+//                                    "Template Message"
+//                                }
+//                            } else "Template Message"
+//                        }
+//
+//                        else -> obj.optString("message_body", "")
+//                    }
+//
+//
+//                    // --- Sender ---
+//                    var sender = obj.optString("sender") ?: ""
+//                    if (sender.isEmpty()) {
+//                        val waIdFromMsg = obj.optString("wa_id") ?: ""
+//                        val currentUserWaId = intent.getStringExtra("wa_id_or_sender") ?: ""
+//                        if (waIdFromMsg == currentUserWaId) sender = "you"
+//                    }
+//
+//                    var imageUrl: String? = obj.optString("url")
+//                    if (imageUrl.isNullOrBlank() || imageUrl == "null") {
+//                        imageUrl = obj.optString("file_url")
+//                    }
+//
+//
+//
+//                    Log.d("MSG_LOAD", "msgType=$messageType, extra_info=$extraInfoStr")
+//                    if (messageType == "image" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
+//                        try {
+//                            if (!extraInfoStr.isNullOrBlank() && extraInfoStr != "null") {
+//                                val extraInfo = JSONObject(extraInfoStr)
+//                                val mediaId = extraInfo.optString("media_id")
+//                                Log.d("PREF_READ", "Trying to restore image for media_id=$mediaId")
+//
+//                                if (!mediaId.isNullOrBlank()) {
+//                                    val cachedUrl = prefs.getString(mediaId, null)
+//                                    Log.d("PREF_READ_RESULT", "Restored from prefs: $mediaId → $cachedUrl")
+//
+//                                    if (!cachedUrl.isNullOrBlank()) {
+//                                        imageUrl = cachedUrl
+//                                        Log.d("IMG_RESTORE", "Restored image from prefs for media_id=$mediaId → $imageUrl")
+//                                    }
+//                                }
+//                            }
+//                        } catch (e: Exception) {
+//                            Log.e("IMG_RESTORE", "Failed to parse extra_info", e)
+//                        }
+//
+//                }
+//
+//                    // --- Restore template image from example.header_handle ---
+//                    if (messageType == "template" && imageUrl.isNullOrEmpty()) {
+//                        try {
+//                            if (extraInfoStr.isNotEmpty()) {
+//                                val extraInfo = JSONObject(extraInfoStr)
+//                                val components = extraInfo.optJSONArray("components")
+//                                val header = (0 until (components?.length() ?: 0))
+//                                    .mapNotNull { components?.optJSONObject(it) }
+//                                    .firstOrNull {
+//                                        it.optString("type").equals("HEADER", true) &&
+//                                                it.optString("format").equals("IMAGE", true)
+//                                    }
+//
+//                                header?.let {
+//                                    imageUrl = it.optJSONArray("parameters")
+//                                        ?.optJSONObject(0)
+//                                        ?.optJSONObject("image")
+//                                        ?.optString("link")
+//                                        ?: it.optJSONObject("example")
+//                                            ?.optJSONArray("header_handle")
+//                                            ?.optString(0)
+//                                                ?: ""
+//
+//                                    Log.d("HEADER_IMAGE_DEBUG", "Restored template header image: $imageUrl")
+//                                }
+//                            }
+//                        } catch (e: Exception) {
+//                            Log.e("IMG_PARSE", "Failed to parse template image", e)
+//                        }
+//                    }
+//                    if (messageType == "template" && imageUrl.isNullOrBlank()) {
+//                        try {
+//                            val extraInfo = JSONObject(extraInfoStr)
+//                            val mediaId = extraInfo.optString("media_id")
+//                            Log.d("PREF_RESTORE", "Trying media_id: $mediaId")
+//                            if (mediaId.isNotBlank()) {
+//                                val cachedUrl = prefs.getString(mediaId, null)
+//                                if (!cachedUrl.isNullOrBlank()) {
+//                                    imageUrl = cachedUrl
+//                                    Log.d("IMG_RESTORE", "Restored from prefs for template: $mediaId → $imageUrl")
+//                                }
+//                            }
+//                        } catch (e: Exception) {
+//                            Log.e("IMG_RESTORE", "Error restoring template image from media_id", e)
+//                        }
+//                    }
+//
+//
+//                    val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
+//                    if (messageBody.isEmpty() && messageType != "image") continue
+//
+//                    val message = Message(
+//                        sender = if (sender.isEmpty()) null else sender,
+//                        messageBody = messageBody,
+//                        messageType = messageType,
+//                        timestamp = timestamp,
+//                        url = imageUrl,
+//                        recipientId = obj.optString("recipient_id"),
+//                        waId = obj.optString("wa_id"),
+//                        extraInfo = extraInfoStr,
+//                        sent = obj.optInt("sent", 0),
+//                        delivered = obj.optInt("delivered", 0),
+//                        read = obj.optInt("read", 0)
+//                    )
+//
+//                    Log.d("IMAGE_RELOAD_DEBUG", "type=$messageType, url=$imageUrl, extra_info=$extraInfoStr")
+//                    messages.add(message)
+//                }
+//
+//                messages.reverse()
+//                adapter.setMessages(messages)
+//                binding.recyclerViewMessages.post {
+//                    binding.recyclerViewMessages.scrollToPosition(messages.size - 1)
+//                }
+//            },
+//            { error ->
+//                Log.e("Volley", "Error loading messages", error)
+//                Toast.makeText(this, "Failed to load messages", Toast.LENGTH_SHORT).show()
+//            })
+//
+//        Volley.newRequestQueue(this).add(request)
+//    }
+
 
     fun loadMessages() {
         val number = intent.getStringExtra("wa_id_or_sender") ?: return
@@ -798,22 +1020,21 @@ class Display_chat : AppCompatActivity() {
 
         val request = JsonArrayRequest(Request.Method.GET, url, null,
             { response ->
+                val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
                 val messages = mutableListOf<Message>()
+
                 for (i in 0 until response.length()) {
                     val obj = response.getJSONObject(i)
+                    val extraInfoStr = obj.optString("extra_info")
                     val messageType = obj.optString("message_type") ?: "text"
 
                     val messageBody = when (messageType) {
                         "template" -> {
-                            val extraInfoStr = obj.optString("extra_info")
-                            Log.d("EXTRA_INFO_RAW", "extra_info for template: $extraInfoStr")
-
                             if (extraInfoStr.isNotEmpty()) {
                                 try {
                                     val extraInfo = JSONObject(extraInfoStr)
                                     val name = extraInfo.optString("name")
                                     val components = extraInfo.optJSONArray("components")
-
                                     val body = (0 until (components?.length() ?: 0))
                                         .mapNotNull { components?.optJSONObject(it) }
                                         .firstOrNull { it.optString("type") == "body" }
@@ -824,90 +1045,81 @@ class Display_chat : AppCompatActivity() {
                                     }
 
                                     val templateText = templateBodyMap[name] ?: name
-
-                                    var rendered = templateText
-                                    values.forEachIndexed { index, v ->
-                                        rendered = rendered.replace("{{${index + 1}}}", v)
+                                    values.foldIndexed(templateText) { index, acc, v ->
+                                        acc.replace("{{${index + 1}}}", v)
                                     }
-                                    rendered
                                 } catch (e: Exception) {
+                                    Log.e("TEMPLATE_ERR", "Template parse failed", e)
                                     "Template Message"
                                 }
-                            } else {
-                                "Template Message"
-                            }
+                            } else "Template Message"
                         }
+
 
                         else -> obj.optString("message_body", "")
                     }
 
-                    //  val imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
-                    var imageUrl = obj.optString("url").ifEmpty { obj.optString("file_url") }
+                    var sender = obj.optString("sender") ?: ""
+                    if (sender.isEmpty()) {
+                        val waIdFromMsg = obj.optString("wa_id") ?: ""
+                        val currentUserWaId = intent.getStringExtra("wa_id_or_sender") ?: ""
+                        if (waIdFromMsg == currentUserWaId) sender = "you"
+                    }
 
-                    if (messageType == "template" && imageUrl.isNullOrEmpty()) {
+                    var imageUrl: String? = obj.optString("url")
+                    if (imageUrl.isNullOrBlank() || imageUrl == "null") {
+                        imageUrl = obj.optString("file_url")
+                    }
+
+                    if (messageType == "image" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
                         try {
-                            val extraInfoStr = obj.optString("extra_info")
-                            Log.d("EXTRA_INFO_RAW", "extra_info: $extraInfoStr")
-
-                            if (extraInfoStr.isNotEmpty()) {
-                                Log.d("DEBUG_EXTRA", "Raw extra_info string: $extraInfoStr")
+                            if (!extraInfoStr.isNullOrBlank() && extraInfoStr != "null") {
                                 val extraInfo = JSONObject(extraInfoStr)
-                                val components = extraInfo.optJSONArray("components")
-                                Log.d(
-                                    "DEBUG_EXTRA",
-                                    "Found components length: ${components?.length()}"
-                                )
+                                val mediaId = extraInfo.optString("media_id")
+                                Log.d("PREF_READ", "Trying to restore image for media_id=$mediaId")
 
+                                if (!mediaId.isNullOrBlank()) {
+                                    val cachedUrl = prefs.getString(mediaId, null)
+                                    Log.d("PREF_READ_RESULT", "Restored from prefs: $mediaId → $cachedUrl")
 
-                                val header = (0 until (components?.length() ?: 0))
-                                    .mapNotNull { components?.optJSONObject(it) }
-                                    .firstOrNull {
-                                        it.optString("type").equals("HEADER", true) &&
-                                                it.optString("format").equals("IMAGE", true)
+                                    if (!cachedUrl.isNullOrBlank()) {
+                                        imageUrl = cachedUrl
                                     }
-
-                                header?.let {
-                                    val imageParam = it.optJSONArray("parameters")
-                                        ?.optJSONObject(0)
-                                        ?.optJSONObject("image")
-                                        ?.optString("link")
-
-                                    val exampleUrl = it.optJSONObject("example")
-                                        ?.optJSONArray("header_handle")
-                                        ?.optString(0)
-
-                                    imageUrl = imageParam ?: exampleUrl ?: ""
-
-                                    Log.d("HEADER_IMAGE_DEBUG", "Found imageUrl: $imageUrl")
                                 }
                             }
                         } catch (e: Exception) {
-                            Log.e("IMG_PARSE", "Header image parse failed", e)
+                            Log.e("IMG_RESTORE", "Failed to parse extra_info", e)
                         }
                     }
-                    val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
-                    if (messageBody.isNullOrEmpty() && messageType != "image") continue
 
-                    val sender = obj.optString("sender")
-                    val recipientId = obj.optString("recipient_id")
-                    val waId = obj.optString("wa_id")
+
+                    if (messageType == "template" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
+                        val restored = resolveTemplateImageFromPrefs(prefs, extraInfoStr)
+                        if (!restored.isNullOrBlank()) {
+                            imageUrl = restored
+                            Log.d("IMG_RESTORE", "Restored template image from prefs → $imageUrl")
+                        }
+                    }
+
+                    val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
+                    if (messageBody.isEmpty() && messageType != "image") continue
 
                     val message = Message(
-                        sender = if (sender.isNullOrEmpty()) null else sender,
+                        sender = if (sender.isEmpty()) null else sender,
                         messageBody = messageBody,
                         messageType = messageType,
                         timestamp = timestamp,
                         url = imageUrl,
-                        recipientId = recipientId,
-                        waId = waId,
-                        extraInfo = obj.optString("extra_info"),
+                        recipientId = obj.optString("recipient_id"),
+                        waId = obj.optString("wa_id"),
+                        extraInfo = extraInfoStr,
                         sent = obj.optInt("sent", 0),
                         delivered = obj.optInt("delivered", 0),
                         read = obj.optInt("read", 0)
                     )
 
-
                     messages.add(message)
+
                 }
 
                 messages.reverse()
@@ -923,6 +1135,32 @@ class Display_chat : AppCompatActivity() {
 
         Volley.newRequestQueue(this).add(request)
     }
+    fun resolveTemplateImageFromPrefs(prefs: SharedPreferences, extraInfoStr: String?): String? {
+        if (extraInfoStr.isNullOrBlank()) return null
+        return try {
+            val json = JSONObject(extraInfoStr)
+            val mediaId = json.optString("media_id")
+            if (!mediaId.isNullOrBlank()) {
+                prefs.getString(mediaId, null)
+            } else {
+                val components = json.optJSONArray("components") ?: return null
+                for (i in 0 until components.length()) {
+                    val comp = components.getJSONObject(i)
+                    if (comp.optString("type").equals("header", true)) {
+                        val param = comp.optJSONArray("parameters")
+                            ?.optJSONObject(0)
+                            ?.optJSONObject("image")
+                        return param?.optString("link")
+                    }
+                }
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("IMG_PREF_PARSE", "Failed to restore image", e)
+            null
+        }
+    }
+
 
     private fun getBodyPlaceholderCount(template: JSONObject): Int {
         val components = JSONArray(template.optString("components"))
@@ -935,6 +1173,173 @@ class Display_chat : AppCompatActivity() {
         }
         return 0
     }
+
+    fun JSONArray.putAll(other: JSONArray) {
+        for (i in 0 until other.length()) {
+            this.put(other.get(i))
+        }
+    }
+    fun showAttachmentPopup() {
+        val inflater = layoutInflater
+        val popupView = inflater.inflate(R.layout.popup_attachment_options, null)
+
+        val popupWindow = PopupWindow(popupView,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true)
+
+        popupWindow.isOutsideTouchable = true
+        popupWindow.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val location = IntArray(2)
+        binding.buttonAttach.getLocationOnScreen(location)
+
+        val x = location[0]
+        val y = location[1]
+
+        popupWindow.showAtLocation(binding.buttonAttach, Gravity.NO_GRAVITY, x, y - popupWindow.contentView.measuredHeight - 10)
+
+        val PICK_IMAGES_REQUEST_CODE = 1001
+
+        popupView.findViewById<LinearLayout>(R.id.optionImage).setOnClickListener {
+            popupWindow.dismiss()
+
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                type = "image/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                addCategory(Intent.CATEGORY_OPENABLE)
+            }
+            startActivityForResult(intent, PICK_IMAGES_REQUEST_CODE)
+        }
+
+        popupView.findViewById<LinearLayout>(R.id.optionVideo).setOnClickListener {
+            popupWindow.dismiss()
+          //  openVideoPicker()
+        }
+        popupView.findViewById<LinearLayout>(R.id.optionDocument).setOnClickListener {
+            popupWindow.dismiss()
+           // openDocumentPicker()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 1001 && resultCode == RESULT_OK && data != null) {
+            val uri = data.data!!
+            val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+            uploadFileAndSend(this, uri, mimeType, waId, phoneNumberId, "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7")
+        }
+    }
+
+
+    fun uploadFileAndSend(
+        context: Context,
+        uri: Uri,
+        fileType: String,
+        waId: String,
+        phoneNumberId: String,
+        accessToken: String
+    ) {
+        val inputStream = context.contentResolver.openInputStream(uri)
+        val fileData = inputStream?.readBytes() ?: return
+
+        val fileName = "upload_" + System.currentTimeMillis() + "." +
+                MimeTypeMap.getSingleton().getExtensionFromMimeType(fileType)
+
+        val request = MultipartRequest(
+            url = "https://waba.mpocket.in/api/$phoneNumberId/upload-file",
+            fileData = fileData,
+            fileName = fileName,
+            fileType = fileType,
+            listener = Response.Listener { response ->
+                val metaMediaId = response.getString("metaMediaId")
+                val s3Url = response.getString("s3Url")
+
+                val prefs = context.getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+                prefs.edit().putString(metaMediaId, s3Url).apply()
+                Log.d("PREF_WRITE", "Saved $metaMediaId → $s3Url")
+
+                sendMediaMessage(s3Url, fileType, waId, phoneNumberId, accessToken)
+
+                val sentMessage = Message(
+                    sender = "you",
+                    messageBody = "Image",
+                    messageType = "image",
+                    timestamp = System.currentTimeMillis() / 1000,
+                    url = s3Url,
+                    recipientId = waId,
+                    waId = waId,
+                    extraInfo = "{\"media_id\":\"$metaMediaId\"}"
+
+                )
+
+                adapter.addMessage(sentMessage)
+
+                binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
+
+                Log.d("UPLOAD_SUCCESS", "metaMediaId: $metaMediaId, s3Url: $s3Url")
+            },
+            errorListener = Response.ErrorListener {
+                Log.e("UPLOAD_FAIL", "Error: ${it.message}", it)
+                val responseBody = it.networkResponse?.data?.let { data -> String(data) }
+                Log.e("UPLOAD_FAIL", "Response Body: $responseBody")
+                Toast.makeText(context, "Upload failed", Toast.LENGTH_SHORT).show()
+            }
+        )
+
+        Volley.newRequestQueue(context).add(request)
+    }
+
+    fun sendMediaMessage(s3Url: String, fileType: String, waId: String, phoneNumberId: String, accessToken: String) {
+        if (waId.isBlank()) {
+            Toast.makeText(this, "Recipient waId is missing", Toast.LENGTH_SHORT).show()
+            Log.e("SEND_MEDIA", "waId is blank, aborting")
+            return
+        }
+
+        val messageType = when {
+            fileType.startsWith("image") -> "image"
+            fileType.startsWith("video") -> "video"
+            else -> "document"
+        }
+
+        val url = "https://waba.mpocket.in/api/$phoneNumberId/messages"
+
+        val body = JSONObject().apply {
+            put("messaging_product", "whatsapp")
+            put("to", waId)
+            put("type", messageType)
+            put(messageType, JSONObject().apply {
+                put("link", s3Url)
+            })
+        }
+
+        Log.d("SEND_MEDIA_PAYLOAD", body.toString(2))
+
+        val request = object : JsonObjectRequest(Method.POST, url, body,
+            Response.Listener {
+                Log.d("MediaSend", "Success: $it")
+                Toast.makeText(this@Display_chat, "Media sent successfully", Toast.LENGTH_SHORT).show()
+
+            },
+            Response.ErrorListener {
+                val errorBody = it.networkResponse?.data?.let { data -> String(data) }
+                Log.e("MediaSend", "Failed", it)
+                Log.e("MediaSend", "Error Body: $errorBody")
+                Toast.makeText(this@Display_chat, "Media send failed", Toast.LENGTH_SHORT).show()
+            }
+        ) {
+            override fun getHeaders(): MutableMap<String, String> {
+                return mutableMapOf(
+                    "Authorization" to "Bearer $accessToken",
+                    "Content-Type" to "application/json"
+                )
+            }
+        }
+
+        Volley.newRequestQueue(this@Display_chat).add(request)
+    }
+
 
 
 }

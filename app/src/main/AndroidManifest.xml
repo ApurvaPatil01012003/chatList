@@ -14,11 +14,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ChatApplication"
         tools:targetApi="31">
+
         <activity
             android:name=".controller.Display_chat"
             android:windowSoftInputMode="adjustResize" />
-
-
         <activity
             android:name=".controller.MainActivity"
             android:exported="true">

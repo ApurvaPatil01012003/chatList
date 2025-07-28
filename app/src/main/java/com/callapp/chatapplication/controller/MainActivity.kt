@@ -2,8 +2,6 @@ package com.callapp.chatapplication.controller
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
-import android.view.Menu
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -58,6 +56,8 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("contact_name", chat.contact_name)
             intent.putExtra("wa_id_or_sender", chat.wa_id_or_sender)
             intent.putExtra("message_count", chat.message_count)
+            intent.putExtra("active_last_24_hours", chat.active_last_24_hours)
+
             startActivity(intent)
         }
         recyclerView.adapter = adapter
