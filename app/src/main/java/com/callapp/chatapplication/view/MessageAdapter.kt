@@ -2,20 +2,25 @@ package com.callapp.chatapplication.view
 
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.text.Html
 import android.text.Spanned
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.callapp.chatapplication.R
 import com.callapp.chatapplication.model.Message
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
@@ -84,6 +89,8 @@ class MessageAdapter(
         } else if (holder is ImageViewHolder) {
             bindImageViewHolder(holder, message)
         }
+
+
     }
 
     private fun bindTextViewHolder(holder: TextViewHolder, message: Message) {
@@ -96,6 +103,8 @@ class MessageAdapter(
         } else {
             View.GONE
         }
+        renderButtons(holder.buttonContainer, message.extraInfo, holder.itemView.context)
+
     }
 
     private fun bindImageViewHolder(holder: ImageViewHolder, message: Message) {
@@ -103,26 +112,22 @@ class MessageAdapter(
         holder.buttonContainer?.removeAllViews()
         renderStatusIcon(holder.tickImageView, message, holder.itemView)
 
-        val imageUrl = resolveImageUrl(message)?.also {
-            message.url = it
-        }
-
-        Log.d("IMAGE_BIND", "Resolved URL: $imageUrl for type: ${message.messageType}")
-
+        val context = holder.itemView.context
+        val imageUrl = resolveImageUrl(message)?.also { message.url = it }
 
         val templateTextView = holder.itemView.findViewById<TextView?>(R.id.imgMessage)
         templateTextView?.text = formatMessageText(message.messageBody ?: "")
 
         if (!imageUrl.isNullOrEmpty()) {
             holder.imageView.visibility = View.VISIBLE
-            Glide.with(holder.itemView.context)
-                .load(imageUrl)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .into(holder.imageView)
+            Glide.with(context).load(imageUrl).diskCacheStrategy(DiskCacheStrategy.ALL).into(holder.imageView)
         } else {
             holder.imageView.setImageDrawable(null)
             holder.imageView.visibility = View.GONE
+
         }
+
+        renderButtons(holder.buttonContainer, message.extraInfo, holder.itemView.context)
 
 
     }
@@ -135,7 +140,6 @@ class MessageAdapter(
             val mediaId = json.optString("media_id")
             if (!mediaId.isNullOrBlank()) {
                 val prefs = parentView.context.getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
-
                 val cachedUrl = prefs.getString(mediaId, null)
                 if (!cachedUrl.isNullOrBlank()) {
                     Log.d("IMAGE_CACHE", "Restored for template mediaId=$mediaId → $cachedUrl")
@@ -264,6 +268,83 @@ class MessageAdapter(
             null
         }
     }
+    private fun createChatButton(context: Context, text: String): Button {
+        return Button(context).apply {
+            this.text = text
+            textSize = 14f
+            isAllCaps = false
+            setPadding(12, 8, 12, 8)
+        }
+    }
+
+    private fun handleButtonClick(
+        subType: String,
+        parameters: JSONArray?,
+        text: String,
+        context: Context
+    ) {
+        when (subType.lowercase()) {
+            "url" -> {
+                val url = parameters?.optJSONObject(0)?.optString("text")
+                if (!url.isNullOrEmpty()) {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    context.startActivity(intent)
+                }
+            }
+            "phone_number" -> {
+                val phone = parameters?.optJSONObject(0)?.optString("text")
+                if (!phone.isNullOrEmpty()) {
+                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                    context.startActivity(intent)
+                }
+            }
+            "quick_reply" -> {
+                Toast.makeText(context, "Quick reply: $text", Toast.LENGTH_SHORT).show()
+            }
+            else -> {
+                Toast.makeText(context, "Unsupported action", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    private fun renderButtons(
+        buttonContainer: ViewGroup?,
+        extraInfoStr: String?,
+        context: Context
+    ) {
+        if (buttonContainer == null || extraInfoStr.isNullOrBlank()) return
+
+        buttonContainer.removeAllViews()
+
+        try {
+            val extraInfo = JSONObject(extraInfoStr)
+            val components = extraInfo.optJSONArray("components") ?: return
+            Log.d("BUTTON_RENDER", "Rendering buttons for template: $extraInfoStr")
+
+            for (i in 0 until components.length()) {
+                val comp = components.getJSONObject(i)
+                if (comp.optString("type") == "BUTTONS") {
+                    val buttons = comp.optJSONArray("buttons") ?: continue
+                    for (j in 0 until buttons.length()) {
+                        val buttonObj = buttons.getJSONObject(j)
+                        val buttonText = buttonObj.optString("text", "Action")
+                        val subType = buttonObj.optString("type")
+
+                        val button = createChatButton(context, buttonText)
+                        button.setOnClickListener {
+                            handleButtonClick(subType, null, buttonText, context)
+                        }
+
+                        buttonContainer.addView(button)
+                        Log.d("BUTTON_RENDER", "Rendered: $buttonText ($subType)")
+                    }
+                }
+            }
+
+        } catch (e: Exception) {
+            Log.e("TEMPLATE_BTN_UI", "Failed to render buttons", e)
+        }
+    }
+
 
 
 }
