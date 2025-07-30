@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -51,14 +52,11 @@ class MessageAdapter(
             message.messageType == "image" && message.isSentByMe() -> TYPE_IMAGE_SENT
             message.messageType == "image" && !message.isSentByMe() -> TYPE_IMAGE_RECEIVED
             message.messageType == "template" && message.isSentByMe() && !message.url.isNullOrEmpty() -> TYPE_TEMPLATE_IMAGE_SENT
-
             message.messageType == "template" && !message.isSentByMe() && !message.url.isNullOrEmpty() -> TYPE_TEMPLATE_IMAGE_RECEIVED
             (message.messageType == "text" || message.messageType == "template") && message.isSentByMe() -> TYPE_TEXT_SENT
             else -> TYPE_TEXT_RECEIVED
         }
     }
-
-
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val layoutId = when (viewType) {
@@ -89,8 +87,6 @@ class MessageAdapter(
         } else if (holder is ImageViewHolder) {
             bindImageViewHolder(holder, message)
         }
-
-
     }
 
     private fun bindTextViewHolder(holder: TextViewHolder, message: Message) {
@@ -103,7 +99,9 @@ class MessageAdapter(
         } else {
             View.GONE
         }
-        renderButtons(holder.buttonContainer, message.extraInfo, holder.itemView.context)
+       // renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, holder.itemView.context)
+        renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, message.componentData, holder.itemView.context)
+
 
     }
 
@@ -124,11 +122,8 @@ class MessageAdapter(
         } else {
             holder.imageView.setImageDrawable(null)
             holder.imageView.visibility = View.GONE
-
         }
-
-        renderButtons(holder.buttonContainer, message.extraInfo, holder.itemView.context)
-
+        renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, message.componentData, holder.itemView.context)
 
     }
 
@@ -146,7 +141,6 @@ class MessageAdapter(
                     return cachedUrl
                 }
             }
-
 
             val components = json.optJSONArray("components") ?: return null
             for (i in 0 until components.length()) {
@@ -196,7 +190,6 @@ class MessageAdapter(
         var buttonContainer: ViewGroup? = view.findViewById(R.id.buttonContainer)
     }
 
-
     fun addMessage(message: Message) {
         if (message.messageType == "template" && message.url.isNullOrEmpty()) {
             message.url = extractImageFromExtraInfo(message.extraInfo)
@@ -205,8 +198,6 @@ class MessageAdapter(
         newList.add(message)
         setMessages(newList)
     }
-
-
 
     fun formatMessageText(rawText: String): Spanned {
         val html = rawText
@@ -265,9 +256,10 @@ class MessageAdapter(
             null
         } catch (e: Exception) {
             Log.e("EXTRACT_IMG", "Parsing error: ${e.message}")
-            null
+            return null
         }
     }
+
     private fun createChatButton(context: Context, text: String): Button {
         return Button(context).apply {
             this.text = text
@@ -306,42 +298,65 @@ class MessageAdapter(
             }
         }
     }
+
     private fun renderButtons(
-        buttonContainer: ViewGroup?,
-        extraInfoStr: String?,
+        container: LinearLayout?,
+        extraInfo: String?,
+        componentData: String?,
         context: Context
     ) {
-        if (buttonContainer == null || extraInfoStr.isNullOrBlank()) return
+        if (container == null) return
 
-        buttonContainer.removeAllViews()
+        container.removeAllViews()
 
         try {
-            val extraInfo = JSONObject(extraInfoStr)
-            val components = extraInfo.optJSONArray("components") ?: return
-            Log.d("BUTTON_RENDER", "Rendering buttons for template: $extraInfoStr")
+            val components: JSONArray = when {
+                !componentData.isNullOrEmpty() -> JSONArray(componentData)
+                !extraInfo.isNullOrEmpty() -> JSONObject(extraInfo).optJSONArray("components") ?: return
+                else -> return
+            }
 
             for (i in 0 until components.length()) {
                 val comp = components.getJSONObject(i)
+
                 if (comp.optString("type") == "BUTTONS") {
                     val buttons = comp.optJSONArray("buttons") ?: continue
-                    for (j in 0 until buttons.length()) {
-                        val buttonObj = buttons.getJSONObject(j)
-                        val buttonText = buttonObj.optString("text", "Action")
-                        val subType = buttonObj.optString("type")
 
-                        val button = createChatButton(context, buttonText)
+                    for (j in 0 until buttons.length()) {
+                        val btn = buttons.getJSONObject(j)
+                        val type = btn.optString("type")
+                        val label = btn.optString("text")
+
+                        val button = createChatButton(context, label)
+
                         button.setOnClickListener {
-                            handleButtonClick(subType, null, buttonText, context)
+                            when (type) {
+                                "PHONE_NUMBER" -> {
+                                    val phone = btn.optString("phone_number")
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                                    context.startActivity(intent)
+                                }
+                                "URL" -> {
+                                    val url = btn.optString("url")
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
+                                }
+                                "FLOW" -> {
+                                    Toast.makeText(context, "Flow: ${btn.optString("text")}", Toast.LENGTH_SHORT).show()
+                                }
+                                "QUICK_REPLY" -> {
+                                    Toast.makeText(context, "Quick Reply: $label", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
 
-                        buttonContainer.addView(button)
-                        Log.d("BUTTON_RENDER", "Rendered: $buttonText ($subType)")
+                        container.addView(button)
                     }
                 }
             }
 
         } catch (e: Exception) {
-            Log.e("TEMPLATE_BTN_UI", "Failed to render buttons", e)
+            Log.e("RENDER_BUTTONS", "Failed to render template buttons", e)
         }
     }
 
