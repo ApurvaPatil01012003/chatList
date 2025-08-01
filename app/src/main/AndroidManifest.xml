@@ -14,12 +14,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ChatApplication"
         tools:targetApi="31">
-
         <activity
-            android:name=".controller.Display_chat"
-            android:windowSoftInputMode="adjustResize" />
+            android:name=".controller.DisplayFullVedio"
+            android:exported="false" />
         <activity
-            android:name=".controller.MainActivity"
+            android:name=".controller.DisplayFullImg"
+            android:exported="false" />
+        <activity
+            android:name=".controller.Login"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -27,6 +29,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".controller.Display_chat"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".controller.MainActivity"
+            android:exported="true" />
     </application>
 
 </manifest>

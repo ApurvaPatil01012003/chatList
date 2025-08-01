@@ -30,18 +30,40 @@ class MultipartRequest(
         )
     }
 
+//    override fun getBody(): ByteArray {
+//        val bos = ByteArrayOutputStream()
+//        val writer = PrintWriter(OutputStreamWriter(bos, "UTF-8"), true)
+//
+//        writer.append("--$boundary\r\n")
+//        writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n")
+//        writer.append("Content-Type: $fileType\r\n\r\n")
+//        writer.flush()
+//        bos.write(fileData)
+//        bos.write("\r\n--$boundary--\r\n".toByteArray())
+//        return bos.toByteArray()
+//    }
+
     override fun getBody(): ByteArray {
         val bos = ByteArrayOutputStream()
         val writer = PrintWriter(OutputStreamWriter(bos, "UTF-8"), true)
 
+        // Write multipart headers
         writer.append("--$boundary\r\n")
         writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n")
         writer.append("Content-Type: $fileType\r\n\r\n")
         writer.flush()
+
+        // Write actual file bytes
         bos.write(fileData)
-        bos.write("\r\n--$boundary--\r\n".toByteArray())
+        bos.write("\r\n".toByteArray())
+
+        // Final boundary
+        writer.append("--$boundary--\r\n")
+        writer.flush()
+
         return bos.toByteArray()
     }
+
 
     override fun parseNetworkResponse(response: NetworkResponse): Response<JSONObject> {
         val json = JSONObject(String(response.data))

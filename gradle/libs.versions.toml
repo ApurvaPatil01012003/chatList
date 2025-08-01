@@ -11,6 +11,11 @@ activity = "1.10.1"
 constraintlayout = "2.2.1"
 volley = "1.2.1"
 glide = "4.16.0"
+sdp = "1.1.1"
+ssp = "1.1.1"
+media3 = "1.3.1"
+libphonenumber = "8.13.23"
+
 
 
 [libraries]
@@ -25,9 +30,17 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
 volley = { group = "com.android.volley", name = "volley", version.ref = "volley" }
 glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 glide-compiler = { module = "com.github.bumptech.glide:compiler", version.ref = "glide" }
+sdp = { group = "com.intuit.sdp", name = "sdp-android", version.ref = "sdp" }
+ssp = { group = "com.intuit.ssp", name = "ssp-android", version.ref = "ssp" }
+media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+libphonenumber = { group = "com.googlecode.libphonenumber", name = "libphonenumber", version.ref = "libphonenumber" }
+
+
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+
 
 

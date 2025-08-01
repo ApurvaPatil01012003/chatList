@@ -15,11 +15,17 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.callapp.chatapplication.R
+import com.callapp.chatapplication.controller.DisplayFullImg
+import com.callapp.chatapplication.controller.DisplayFullVedio
 import com.callapp.chatapplication.model.Message
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,6 +44,12 @@ class MessageAdapter(
         const val TYPE_IMAGE_RECEIVED = 3
         const val TYPE_TEMPLATE_IMAGE_SENT = 4
         const val TYPE_TEMPLATE_IMAGE_RECEIVED = 5
+        const val TYPE_VIDEO_SENT = 6
+        const val TYPE_VIDEO_RECEIVED = 7
+        const val TYPE_DOCUMENT_SENT = 8
+        const val TYPE_DOCUMENT_RECEIVED = 9
+
+
     }
 
     fun setMessages(newList: List<Message>) {
@@ -54,10 +66,15 @@ class MessageAdapter(
             message.messageType == "template" && message.isSentByMe() && !message.url.isNullOrEmpty() -> TYPE_TEMPLATE_IMAGE_SENT
             message.messageType == "template" && !message.isSentByMe() && !message.url.isNullOrEmpty() -> TYPE_TEMPLATE_IMAGE_RECEIVED
             (message.messageType == "text" || message.messageType == "template") && message.isSentByMe() -> TYPE_TEXT_SENT
+            message.messageType == "video" && message.isSentByMe() -> TYPE_VIDEO_SENT
+            message.messageType == "video" && !message.isSentByMe() -> TYPE_VIDEO_RECEIVED
+            message.messageType == "document" && message.isSentByMe() -> TYPE_DOCUMENT_SENT
+            message.messageType == "document" && !message.isSentByMe() -> TYPE_DOCUMENT_RECEIVED
+
+
             else -> TYPE_TEXT_RECEIVED
         }
     }
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val layoutId = when (viewType) {
             TYPE_TEXT_SENT -> R.layout.item_text_sent
@@ -66,16 +83,24 @@ class MessageAdapter(
             TYPE_IMAGE_RECEIVED -> R.layout.item_image_received
             TYPE_TEMPLATE_IMAGE_SENT -> R.layout.item_template_image_sent
             TYPE_TEMPLATE_IMAGE_RECEIVED -> R.layout.item_template_image_received
-            else -> R.layout.item_text_sent
+            TYPE_VIDEO_SENT -> R.layout.item_video_sent
+            TYPE_VIDEO_RECEIVED -> R.layout.item_video_received
+            TYPE_DOCUMENT_SENT -> R.layout.item_document_sent
+            TYPE_DOCUMENT_RECEIVED -> R.layout.item_document_received
+
+            else -> R.layout.item_text_received
         }
 
         val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
-        return if (viewType == TYPE_TEXT_SENT || viewType == TYPE_TEXT_RECEIVED) {
-            TextViewHolder(view)
-        } else {
-            ImageViewHolder(view)
+
+        return when (viewType) {
+            TYPE_TEXT_SENT, TYPE_TEXT_RECEIVED -> TextViewHolder(view)
+            TYPE_VIDEO_SENT, TYPE_VIDEO_RECEIVED -> VideoViewHolder(view)
+            TYPE_DOCUMENT_SENT, TYPE_DOCUMENT_RECEIVED -> DocumentViewHolder(view)
+            else -> ImageViewHolder(view)
         }
     }
+
 
     override fun getItemCount(): Int = messages.size
 
@@ -86,7 +111,14 @@ class MessageAdapter(
             bindTextViewHolder(holder, message)
         } else if (holder is ImageViewHolder) {
             bindImageViewHolder(holder, message)
+        }else if(holder is VideoViewHolder)
+        {
+            bindVideoViewHolder(holder, message)
         }
+        else if (holder is DocumentViewHolder) {
+            bindDocumentViewHolder(holder, message)
+        }
+
     }
 
     private fun bindTextViewHolder(holder: TextViewHolder, message: Message) {
@@ -125,7 +157,94 @@ class MessageAdapter(
         }
         renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, message.componentData, holder.itemView.context)
 
+
+        holder.imageView.setOnClickListener {
+            if (!imageUrl.isNullOrEmpty()) {
+                val intent = Intent(holder.itemView.context, DisplayFullImg::class.java).apply {
+                    putExtra("image_url", imageUrl)
+                }
+                holder.itemView.context.startActivity(intent)
+            }
+        }
+
+
+
     }
+
+    private fun bindVideoViewHolder(holder: VideoViewHolder, message: Message) {
+        holder.timestampTextView.text = formatTimestamp(message.timestamp)
+        renderStatusIcon(holder.tickImageView, message, holder.itemView)
+
+        val context = holder.itemView.context
+        val videoUrl = message.url ?: return
+
+        holder.player?.release()
+
+
+        val player = ExoPlayer.Builder(context).build().also {
+            holder.playerView.player = it
+            val mediaItem = MediaItem.fromUri(videoUrl)
+            it.setMediaItem(mediaItem)
+            it.prepare()
+            it.playWhenReady = false
+        }
+
+        holder.player = player
+
+        holder.playerView.setOnClickListener {
+            val intent = Intent(context, DisplayFullVedio::class.java).apply {
+                putExtra("video_url", videoUrl)
+            }
+            context.startActivity(intent)
+        }
+    }
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        super.onViewRecycled(holder)
+        if (holder is VideoViewHolder) {
+            holder.player?.release()
+            holder.player = null
+            holder.playerView.player = null
+        }
+    }
+
+
+    private fun bindDocumentViewHolder(holder: DocumentViewHolder, message: Message) {
+        holder.timestampTextView.text = formatTimestamp(message.timestamp)
+        renderStatusIcon(holder.tickImageView, message, holder.itemView)
+
+        val context = holder.itemView.context
+        val docUrl = message.url ?: return
+
+        val filename = docUrl.substringAfterLast('/')
+        holder.fileName.text = filename
+
+        holder.open.setOnClickListener {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(docUrl), "application/pdf")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "No app found to open document", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    inner class VideoViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val playerView: PlayerView = view.findViewById(R.id.exoPlayerView)
+        val timestampTextView: TextView = view.findViewById(R.id.timestampText)
+        val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
+        var player: ExoPlayer? = null
+    }
+
+    inner class DocumentViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val fileName: TextView = view.findViewById(R.id.fileName)
+        val open : LinearLayout = view.findViewById(R.id.open)
+        val timestampTextView: TextView = view.findViewById(R.id.timestampText)
+        val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
+    }
+
 
     private fun resolveImageUrl(message: Message): String? {
         if (!message.url.isNullOrBlank()) return message.url
@@ -330,22 +449,26 @@ class MessageAdapter(
                         val button = createChatButton(context, label)
 
                         button.setOnClickListener {
-                            when (type) {
-                                "PHONE_NUMBER" -> {
-                                    val phone = btn.optString("phone_number")
-                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-                                    context.startActivity(intent)
-                                }
+                            val param = btn.optString("param")
+                            when (type.uppercase()) {
                                 "URL" -> {
-                                    val url = btn.optString("url")
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(param))
                                     context.startActivity(intent)
                                 }
-                                "FLOW" -> {
-                                    Toast.makeText(context, "Flow: ${btn.optString("text")}", Toast.LENGTH_SHORT).show()
+
+                                "PHONE_NUMBER" -> {
+                                    val intent = Intent(Intent.ACTION_DIAL).apply {
+                                        data = Uri.parse("tel:$param")
+                                    }
+                                    context.startActivity(intent)
                                 }
+
                                 "QUICK_REPLY" -> {
-                                    Toast.makeText(context, "Quick Reply: $label", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Quick reply: $label", Toast.LENGTH_SHORT).show()
+                                }
+
+                                else -> {
+                                    Toast.makeText(context, "Unknown button type: $type", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }

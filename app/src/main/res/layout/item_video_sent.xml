@@ -1,0 +1,49 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical"
+    android:layout_gravity="end"
+    android:gravity="end"
+    android:padding="8dp">
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/chat_background_gradient"
+        android:layout_marginLeft="30dp"
+        android:padding="10dp"
+        android:maxWidth="280dp">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/exoPlayerView"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        app:use_controller="true"
+        app:resize_mode="fit"
+        android:layout_margin="8dp"
+        android:background="#000"/>
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_gravity="end"
+            android:layout_marginTop="4dp">
+
+    <TextView
+        android:id="@+id/timestampText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="12:00 PM"
+        android:textSize="12sp"
+        android:textColor="@android:color/darker_gray"
+         />
+
+    <ImageView
+        android:id="@+id/statusTick"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+       />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
