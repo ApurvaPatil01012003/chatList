@@ -12,7 +12,8 @@ data class Message(
     var delivered: Int = 0,
     var read: Int = 0,
     val extraInfo: String? = null,
-    val componentData: String? = null
+    val componentData: String? = null,
+    val caption: String? = null,
 )
 {
     fun isSentByMe(): Boolean {

@@ -148,6 +148,27 @@ class MessageAdapter(
         val templateTextView = holder.itemView.findViewById<TextView?>(R.id.imgMessage)
         templateTextView?.text = formatMessageText(message.messageBody ?: "")
 
+//
+//        if (!message.caption.isNullOrEmpty()) {
+//            holder.captionTextView?.text = message.caption
+//            holder.captionTextView?.visibility = View.VISIBLE
+//            Log.d("ADAPTER_CAPTION", "Showing caption: ${message.caption}")
+//        } else {
+//            holder.captionTextView?.visibility = View.GONE
+//            Log.d("ADAPTER_CAPTION", "No caption to show")
+//        }
+
+        val restoredCaption = getRestoredCaption(message)
+        if (!restoredCaption.isNullOrBlank()) {
+            holder.captionTextView?.text = restoredCaption
+            holder.captionTextView?.visibility = View.VISIBLE
+            Log.d("ADAPTER_CAPTION", "Restored caption: $restoredCaption")
+        } else {
+            holder.captionTextView?.visibility = View.GONE
+        }
+
+
+
         if (!imageUrl.isNullOrEmpty()) {
             holder.imageView.visibility = View.VISIBLE
             Glide.with(context).load(imageUrl).diskCacheStrategy(DiskCacheStrategy.ALL).into(holder.imageView)
@@ -191,6 +212,14 @@ class MessageAdapter(
 
         holder.player = player
 
+        if (!message.caption.isNullOrEmpty()) {
+            holder.captionTextView?.text = message.caption
+            holder.captionTextView?.visibility = View.VISIBLE
+            Log.d("ADAPTER_CAPTION", " caption shown: ${message.caption}")
+        } else {
+            holder.captionTextView?.visibility = View.GONE
+        }
+
         holder.playerView.setOnClickListener {
             val intent = Intent(context, DisplayFullVedio::class.java).apply {
                 putExtra("video_url", videoUrl)
@@ -218,6 +247,14 @@ class MessageAdapter(
         val filename = docUrl.substringAfterLast('/')
         holder.fileName.text = filename
 
+        if (!message.caption.isNullOrEmpty()) {
+            holder.captionTextView?.text = message.caption
+            holder.captionTextView?.visibility = View.VISIBLE
+            Log.d("ADAPTER_CAPTION", "Document caption shown: ${message.caption}")
+        } else {
+            holder.captionTextView?.visibility = View.GONE
+        }
+
         holder.open.setOnClickListener {
             try {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -236,6 +273,7 @@ class MessageAdapter(
         val timestampTextView: TextView = view.findViewById(R.id.timestampText)
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
         var player: ExoPlayer? = null
+        val captionTextView: TextView? = view.findViewById(R.id.vedioCaption)
     }
 
     inner class DocumentViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -243,6 +281,7 @@ class MessageAdapter(
         val open : LinearLayout = view.findViewById(R.id.open)
         val timestampTextView: TextView = view.findViewById(R.id.timestampText)
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
+        val captionTextView: TextView? = view.findViewById(R.id.documentCaption)
     }
 
 
@@ -307,6 +346,9 @@ class MessageAdapter(
         val timestampTextView: TextView = view.findViewById(R.id.timestampText)
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
         var buttonContainer: ViewGroup? = view.findViewById(R.id.buttonContainer)
+        val captionTextView: TextView? = view.findViewById(R.id.imageCaption)
+
+
     }
 
     fun addMessage(message: Message) {
@@ -481,6 +523,32 @@ class MessageAdapter(
         } catch (e: Exception) {
             Log.e("RENDER_BUTTONS", "Failed to render template buttons", e)
         }
+    }
+    private fun getRestoredCaption(message: Message): String? {
+        if (!message.caption.isNullOrBlank()) return message.caption
+
+        // Safe check before JSON parsing
+        val extra = message.extraInfo
+        if (extra.isNullOrBlank() || extra == "null") return null
+
+        try {
+            val json = JSONObject(extra)
+            val captionFromExtra = json.optString("caption", null)
+            if (!captionFromExtra.isNullOrBlank()) return captionFromExtra
+
+            val mediaId = json.optString("media_id", "")
+            if (mediaId.isNotBlank()) {
+                val prefs = parentView.context.getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+                return prefs.getString("caption_$mediaId", null)?.also {
+                    Log.d("CAPTION_FALLBACK", "Restored caption using media ID: $it")
+                }
+            }
+
+        } catch (e: Exception) {
+            Log.e("CAPTION_RESTORE", "Failed to restore caption: ${e.message}")
+        }
+
+        return null
     }
 
 

@@ -12,6 +12,7 @@
         android:orientation="vertical"
         android:background="@drawable/chat_bg_recived"
         android:padding="10dp"
+        android:layout_marginTop="10dp"
         android:maxWidth="280dp">
 
     <ImageView
@@ -20,6 +21,14 @@
         android:layout_height="200dp"
         android:scaleType="centerCrop"
         />
+        <TextView
+            android:id="@+id/imageCaption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#000000"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp"
+            android:visibility="gone" />
     <TextView
         android:id="@+id/timestampText"
         android:layout_width="wrap_content"

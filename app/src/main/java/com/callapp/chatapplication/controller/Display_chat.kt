@@ -4,12 +4,14 @@ import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.database.Cursor
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -34,10 +36,14 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.android.volley.Request
@@ -850,12 +856,12 @@ class Display_chat : AppCompatActivity() {
             { response ->
                 val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
                 val messages = mutableListOf<Message>()
-
                 for (i in 0 until response.length()) {
                     val obj = response.getJSONObject(i)
+
                     val extraInfoStr = obj.optString("extra_info")
-                    Log.d("extraonfo", "$extraInfoStr")
                     val messageType = obj.optString("message_type") ?: "text"
+                    Log.d("DEBUG_EXTRA_INFO", "[$i] type=$messageType, extraInfoStr=$extraInfoStr")
 
                     val messageBody = when (messageType) {
                         "template" -> {
@@ -899,11 +905,33 @@ class Display_chat : AppCompatActivity() {
                     if (imageUrl.isNullOrBlank() || imageUrl == "null") {
                         imageUrl = obj.optString("file_url")
                     }
+                    var caption: String? = null
+
+                    if (caption.isNullOrBlank()) {
+                        val extra = obj.optString("extra_info")
+                        if (!extra.isNullOrBlank() && extra != "null") {
+                            try {
+                                val json = JSONObject(extra)
+                                caption = json.optString("caption", null)
+                                Log.d("CAPTION_RESTORE", "Found caption in extra_info: $caption")
+                            } catch (e: Exception) {
+                                Log.e("CAPTION_RESTORE", "Failed to parse caption from extra_info", e)
+                            }
+                        }
+                    }
+
+                    if (caption.isNullOrBlank() && messageType in listOf("image", "video", "document")) {
+                        caption = messageBody
+                        Log.d("CAPTION_ASSIGN", "Assigned caption from message_body: $caption")
+                    }
+
+
 
                     if (messageType == "image" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
                         try {
                             if (!extraInfoStr.isNullOrBlank() && extraInfoStr != "null") {
                                 val extraInfo = JSONObject(extraInfoStr)
+
                                 val mediaId = extraInfo.optString("media_id")
                                 Log.d("PREF_READ", "Trying to restore image for media_id=$mediaId")
 
@@ -917,6 +945,7 @@ class Display_chat : AppCompatActivity() {
                                     if (!cachedUrl.isNullOrBlank()) {
                                         imageUrl = cachedUrl
                                     }
+
                                 }
                             }
                         } catch (e: Exception) {
@@ -943,7 +972,6 @@ class Display_chat : AppCompatActivity() {
                         null
                     }
 
-                    Log.d("Component_data", "$componentDataJson")
                     val message = Message(
                         sender = if (sender.isEmpty()) null else sender,
                         messageBody = messageBody,
@@ -956,9 +984,9 @@ class Display_chat : AppCompatActivity() {
                         componentData = componentDataJson,
                         sent = obj.optInt("sent", 0),
                         delivered = obj.optInt("delivered", 0),
-                        read = obj.optInt("read", 0)
+                        read = obj.optInt("read", 0),
+                        caption = caption,
                     )
-
 
                     messages.add(message)
 
@@ -1044,12 +1072,18 @@ class Display_chat : AppCompatActivity() {
         val x = location[0]
         val y = location[1]
 
+        popupView.measure(
+            View.MeasureSpec.UNSPECIFIED,
+            View.MeasureSpec.UNSPECIFIED
+        )
+        val popupHeight = popupView.measuredHeight
         popupWindow.showAtLocation(
             binding.buttonAttach,
             Gravity.NO_GRAVITY,
             x,
-            y - popupWindow.contentView.measuredHeight - 10
+            y - popupHeight - 60
         )
+
 
         val PICK_IMAGES_REQUEST_CODE = 1001
         val PICK_VIDEO_REQUEST_CODE = 1002
@@ -1064,6 +1098,8 @@ class Display_chat : AppCompatActivity() {
                 addCategory(Intent.CATEGORY_OPENABLE)
             }
             startActivityForResult(intent, PICK_IMAGES_REQUEST_CODE)
+
+
         }
 
         popupView.findViewById<LinearLayout>(R.id.optionVideo).setOnClickListener {
@@ -1107,16 +1143,10 @@ class Display_chat : AppCompatActivity() {
             }
 
             when (requestCode) {
-                1001, 1002, 1003 -> {
-                    uploadFileAndSend(
-                        this,
-                        uri,
-                        mimeType,
-                        waId,
-                        phoneNumberId,
-                        "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
-                    )
+                1001,1003 ,1002-> {
+                    showImagePreviewDialog(uri, mimeType)
                 }
+
             }
         }
     }
@@ -1128,7 +1158,8 @@ class Display_chat : AppCompatActivity() {
         fileType: String,
         waId: String,
         phoneNumberId: String,
-        accessToken: String
+        accessToken: String,
+        caption: String? = null
     ) {
         val inputStream = context.contentResolver.openInputStream(uri)
         val fileData = inputStream?.readBytes() ?: return
@@ -1152,8 +1183,6 @@ class Display_chat : AppCompatActivity() {
             fileName = fileName,
             fileType = fileType,
             listener = Response.Listener { response ->
-//                val metaMediaId = response.getString("metaMediaId")
-//                val s3Url = response.getString("s3Url")
 
                 val metaMediaId = response.optString("metaMediaId", "")
                 val s3Url = response.optString("s3Url", "")
@@ -1173,7 +1202,7 @@ class Display_chat : AppCompatActivity() {
                 prefs.edit().putString(metaMediaId, s3Url).apply()
                 Log.d("PREF_WRITE", "Saved $metaMediaId → $s3Url")
 
-                sendMediaMessage(s3Url, fileType, waId, phoneNumberId, accessToken)
+                sendMediaMessage(s3Url, fileType, waId, phoneNumberId, accessToken,caption)
 
                 val messageType = when {
                     fileType.startsWith("image") -> "image"
@@ -1189,6 +1218,11 @@ class Display_chat : AppCompatActivity() {
                     else -> "Media"
                 }
 
+                val extraInfoJson = JSONObject().apply {
+                    put("media_id", metaMediaId)
+                    caption?.let { put("caption", it) }
+                }
+
                 val sentMessage = Message(
                     sender = "you",
                     messageBody = messageBody,
@@ -1197,15 +1231,26 @@ class Display_chat : AppCompatActivity() {
                     url = s3Url,
                     recipientId = waId,
                     waId = waId,
-                    extraInfo = "{\"media_id\":\"$metaMediaId\"}"
+                    caption = caption,
+                    extraInfo = extraInfoJson.toString()
+
                 )
+
+                Log.d("extraonfo", "$extraInfoJson")
+
+                prefs.edit().putString(metaMediaId, s3Url).apply()
+
+                prefs.edit().putString("caption_$metaMediaId", caption).apply()
+                Log.d("extraonf", "Saved caption caption_$metaMediaId = $caption")
+
+
 
 
                 adapter.addMessage(sentMessage)
 
                 binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
 
-                Log.d("UPLOAD_SUCCESS", "metaMediaId: $metaMediaId, s3Url: $s3Url")
+                Log.d("UPLOAD_SUCCESS", "metaMediaId: $metaMediaId, s3Url: $s3Url ")
             },
             errorListener = Response.ErrorListener {
                 Log.e("UPLOAD_FAIL", "Error: ${it.message}", it)
@@ -1223,7 +1268,8 @@ class Display_chat : AppCompatActivity() {
         fileType: String,
         waId: String,
         phoneNumberId: String,
-        accessToken: String
+        accessToken: String,
+        caption: String? = null
     ) {
         if (waId.isBlank()) {
             Toast.makeText(this, "Recipient waId is missing", Toast.LENGTH_SHORT).show()
@@ -1247,6 +1293,12 @@ class Display_chat : AppCompatActivity() {
         val mediaPayload = JSONObject().apply {
             put("link", s3Url)
 
+            if (messageType == "image" || messageType == "video" || messageType == "document") {
+                if (!caption.isNullOrBlank()) {
+                    put("caption", caption)
+                }
+            }
+
             if (messageType == "document") {
                 val extension =
                     MimeTypeMap.getSingleton().getExtensionFromMimeType(fileType) ?: "file"
@@ -1254,12 +1306,14 @@ class Display_chat : AppCompatActivity() {
             }
         }
 
+
         val body = JSONObject().apply {
             put("messaging_product", "whatsapp")
             put("to", waId)
             put("type", messageType)
             put(messageType, mediaPayload)
         }
+
 
         Log.d("SEND_MEDIA_PAYLOAD", "Sending $messageType message to $waId with URL: $s3Url")
         Log.d("SEND_MEDIA_PAYLOAD", body.toString(2))
@@ -1293,6 +1347,98 @@ class Display_chat : AppCompatActivity() {
         }
 
         Volley.newRequestQueue(this@Display_chat).add(request)
+    }
+
+
+    private fun showImagePreviewDialog(uri: Uri, mimeType: String) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_send_image, null)
+        val imageView = dialogView.findViewById<ImageView>(R.id.imagePreview)
+        val captionEditText = dialogView.findViewById<EditText>(R.id.captionEditText)
+        val btnSend = dialogView.findViewById<Button>(R.id.btnSend)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnCancel)
+        val documentPreview = dialogView.findViewById<LinearLayout>(R.id.documentPreview)
+        val documentFileName = dialogView.findViewById<TextView>(R.id.documentFileName)
+        val exoPlayerView = dialogView.findViewById<PlayerView>(R.id.exoPlayerView)
+
+        imageView.visibility = View.GONE
+        documentPreview.visibility = View.GONE
+        exoPlayerView.visibility = View.GONE
+
+        var player: ExoPlayer? = null
+
+        when {
+            mimeType.startsWith("image") -> {
+                imageView.visibility = View.VISIBLE
+                imageView.setImageURI(uri)
+            }
+
+            mimeType.startsWith("video") -> {
+                exoPlayerView.visibility = View.VISIBLE
+                player = ExoPlayer.Builder(this).build()
+                exoPlayerView.player = player
+                player.setMediaItem(MediaItem.fromUri(uri))
+                player.prepare()
+                player.playWhenReady = false
+            }
+
+            else -> {
+                documentPreview.visibility = View.VISIBLE
+                documentFileName.text = getFileNameFromUri(this, uri)
+            }
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        btnSend.setOnClickListener {
+            dialog.dismiss()
+            player?.release()
+            val caption = captionEditText.text.toString().trim()
+            uploadFileAndSend(
+                this,
+                uri,
+                mimeType,
+                waId,
+                phoneNumberId,
+                "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+                caption
+            )
+        }
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+            player?.release()
+        }
+
+        dialog.setOnDismissListener {
+            player?.release()
+        }
+
+        dialog.show()
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+
+
+
+    fun getFileNameFromUri(context: Context, uri: Uri): String {
+        var name = "document"
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            val nameIndex = it.getColumnIndexOpenableColumnName()
+            if (nameIndex != -1 && it.moveToFirst()) {
+                name = it.getString(nameIndex)
+            }
+        }
+        return name
+    }
+
+    fun Cursor.getColumnIndexOpenableColumnName(): Int {
+        return getColumnIndex("_display_name")
+            .takeIf { it != -1 }
+            ?: getColumnIndex(OpenableColumns.DISPLAY_NAME)
     }
 
 

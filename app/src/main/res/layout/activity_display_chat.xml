@@ -72,7 +72,7 @@
 
             <ImageButton
                 android:id="@+id/buttonAttach"
-                android:layout_width="40dp"
+                android:layout_width="37dp"
                 android:layout_height="40dp"
                 android:background="@android:color/transparent"
                 android:src="@drawable/baseline_attach_file_24"
