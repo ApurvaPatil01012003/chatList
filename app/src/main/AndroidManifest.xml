@@ -15,6 +15,9 @@
         android:theme="@style/Theme.ChatApplication"
         tools:targetApi="31">
         <activity
+            android:name=".controller.ProfileActivity"
+            android:exported="false" />
+        <activity
             android:name=".controller.DisplayFullVedio"
             android:exported="false" />
         <activity

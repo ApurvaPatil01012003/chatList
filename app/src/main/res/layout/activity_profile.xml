@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    tools:context=".controller.ProfileActivity">
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:popupTheme="@style/ToolbarLightPopupStyle"
+        android:theme="@style/ToolbarLightIconStyle"
+        app:subtitleTextColor="@android:color/black"
+        app:title="Contact info"
+        app:titleTextColor="@android:color/black" />
+</com.google.android.material.appbar.AppBarLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:background="#DADADA" />
+
+    <FrameLayout
+        android:layout_width="@dimen/_150sdp"
+        android:layout_height="@dimen/_150sdp"
+        android:layout_gravity="center"
+        android:padding="@dimen/_6sdp"
+        android:layout_marginTop="@dimen/_10sdp"
+        android:background="@drawable/bg_tag_initials">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:padding="0dp"
+            android:src="@drawable/users_profile" />
+
+        <View
+            android:id="@+id/activeDot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="2dp"
+            android:layout_marginBottom="2dp"
+            android:background="@drawable/green_dot" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/txtName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="name"
+        android:textSize="@dimen/_20ssp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:textColor="#000000"/>
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/_20sdp"
+    android:orientation="vertical"
+    >
+    <TextView
+        android:id="@+id/txtNumber"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="name"
+        android:textSize="@dimen/_12ssp"
+        android:gravity="center"
+        android:textColor="#6A6969"/>
+    <TextView
+        android:id="@+id/txtFirstMsg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="first msg "
+        android:textSize="@dimen/_12ssp"
+        android:gravity="center"
+        android:textColor="#6A6969"/>
+    <TextView
+        android:id="@+id/txtLastMsg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="last msg"
+        android:textSize="@dimen/_12ssp"
+        android:gravity="center"
+        android:textColor="#6A6969"/>
+</LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="@dimen/_30sdp"
+        >
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Phone"
+            android:textSize="@dimen/_16ssp"
+            android:layout_marginStart="@dimen/_14sdp"
+            android:textColor="#6A6969"/>
+        <TextView
+            android:id="@+id/phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1234567890"
+            android:padding="@dimen/_10sdp"
+            android:textSize="@dimen/_16ssp"
+            android:layout_marginStart="@dimen/_10sdp"
+            android:textColor="#000000"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="@dimen/_20sdp"
+        >
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Country"
+            android:textSize="@dimen/_16ssp"
+            android:layout_marginStart="@dimen/_14sdp"
+            android:textColor="#6A6969"/>
+        <TextView
+            android:id="@+id/country"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="country"
+            android:padding="@dimen/_10sdp"
+            android:textSize="@dimen/_16ssp"
+            android:layout_marginStart="@dimen/_10sdp"
+            android:textColor="#000000"/>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="@dimen/_20sdp"
+        >
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Username"
+            android:textSize="@dimen/_16ssp"
+            android:layout_marginStart="@dimen/_14sdp"
+            android:textColor="#6A6969"/>
+        <TextView
+            android:id="@+id/username"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="agent"
+            android:padding="@dimen/_10sdp"
+            android:textSize="@dimen/_16ssp"
+            android:layout_marginStart="@dimen/_10sdp"
+            android:textColor="#000000"/>
+
+    </LinearLayout>
+</LinearLayout>

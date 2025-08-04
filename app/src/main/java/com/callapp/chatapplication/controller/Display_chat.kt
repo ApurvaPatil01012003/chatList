@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.database.Cursor
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -19,6 +18,8 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -66,14 +67,22 @@ class Display_chat : AppCompatActivity() {
     private lateinit var binding: ActivityDisplayChatBinding
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MessageAdapter
-  //  val phoneNumberId = "361462453714220"
-  lateinit var phoneNumberId: String
+
+    //  val phoneNumberId = "361462453714220"
+    lateinit var phoneNumberId: String
 
     private lateinit var waId: String
     private var isActiveLast24Hours: Boolean = true
     val templateBodyMap = mutableMapOf<String, String>()
     val templateButtonsMap = mutableMapOf<String, JSONArray>()
     val templateFullMap = mutableMapOf<String, JSONObject>()
+    private var name: String? = null
+    private var number: String? = null
+    private var userName: String? = null
+    private var fMsgDate: String?=null
+    private var lMsgDate :String?=null
+    private var flagEmoji: String?=null
+    private var totalPages :Int =0
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -89,17 +98,29 @@ class Display_chat : AppCompatActivity() {
         isActiveLast24Hours = intent.getBooleanExtra("active_last_24_hours", true)
 
 
-
-        val name = intent.getStringExtra("contact_name")
-        var number = intent.getStringExtra("wa_id_or_sender")
+        name = intent.getStringExtra("contact_name")
+        number = intent.getStringExtra("wa_id_or_sender")
         waId = intent.getStringExtra("wa_id_or_sender") ?: ""
         phoneNumberId = intent.getStringExtra("phoneNumberId") ?: ""
+        userName = intent.getStringExtra("user_name") ?: ""
+        fMsgDate=intent.getStringExtra("first_message_date")?:""
+        lMsgDate =intent.getStringExtra("last_message_date")?:""
+        totalPages=intent.getIntExtra("Total_pages",0)
+        Log.d("Total","count is : $totalPages")
+        if (!userName.isNullOrBlank() && userName != "null") {
+            val initial = userName!!.trim().firstOrNull()?.uppercaseChar() ?: 'N'
+            binding.txtTagInitial.text = initial.toString()
+            binding.txtTagInitial.visibility = View.VISIBLE
+        } else {
+            binding.txtTagInitial.visibility = View.GONE
+        }
+
 
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { finish() }
         binding.toolbar.navigationIcon?.setTint(ContextCompat.getColor(this, android.R.color.black))
-
+        binding.txtTag.text = userName
 
 
         supportActionBar?.title = "$name"
@@ -115,7 +136,7 @@ class Display_chat : AppCompatActivity() {
 
         val countryIso = getCountryIsoFromPhoneNumber(number ?: "")
         if (countryIso != null) {
-            val flagEmoji = countryCodeToFlagEmoji(countryIso)
+            flagEmoji = countryCodeToFlagEmoji(countryIso)
             binding.toolbar.title = "$flagEmoji $name"
         }
 
@@ -674,11 +695,25 @@ class Display_chat : AppCompatActivity() {
 
             imageEditText.addTextChangedListener(object : TextWatcher {
                 override fun afterTextChanged(s: Editable?) {}
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int
+                ) {
+                }
+
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     val newUrl = s.toString().trim()
                     userInputs[0] = newUrl
-                    updateBodyPreview(bodyText, bodyMatches, userInputs, layout, context, hasImageHeader)
+                    updateBodyPreview(
+                        bodyText,
+                        bodyMatches,
+                        userInputs,
+                        layout,
+                        context,
+                        hasImageHeader
+                    )
                 }
             })
         }
@@ -708,10 +743,29 @@ class Display_chat : AppCompatActivity() {
 
                 editText.addTextChangedListener(object : TextWatcher {
                     override fun afterTextChanged(s: Editable?) {}
-                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    override fun beforeTextChanged(
+                        s: CharSequence?,
+                        start: Int,
+                        count: Int,
+                        after: Int
+                    ) {
+                    }
+
+                    override fun onTextChanged(
+                        s: CharSequence?,
+                        start: Int,
+                        before: Int,
+                        count: Int
+                    ) {
                         userInputs[inputIndex] = s.toString()
-                        updateBodyPreview(bodyText, bodyMatches, userInputs, layout, context, hasImageHeader)
+                        updateBodyPreview(
+                            bodyText,
+                            bodyMatches,
+                            userInputs,
+                            layout,
+                            context,
+                            hasImageHeader
+                        )
                     }
                 })
 
@@ -848,6 +902,168 @@ class Display_chat : AppCompatActivity() {
     }
 
 
+//    fun loadMessages(
+//        page: Int = 1,
+//        totalPages: Int = intent.getIntExtra("Total_pages", 1),
+//        collectedMessages: MutableList<Message> = mutableListOf()
+//
+//    ) {
+//        val number = intent.getStringExtra("wa_id_or_sender") ?: return
+//        val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/$page"
+//
+//        val request = JsonArrayRequest(Request.Method.GET, url, null,
+//            { response ->
+//                val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+//                for (i in 0 until response.length()) {
+//                    val obj = response.getJSONObject(i)
+//
+//                    val extraInfoStr = obj.optString("extra_info")
+//                    val messageType = obj.optString("message_type") ?: "text"
+//                    Log.d("DEBUG_EXTRA_INFO", "[$i] type=$messageType, extraInfoStr=$extraInfoStr")
+//
+//                    val messageBody = when (messageType) {
+//                        "template" -> {
+//                            if (extraInfoStr.isNotEmpty()) {
+//                                try {
+//                                    val extraInfo = JSONObject(extraInfoStr)
+//                                    val name = extraInfo.optString("name")
+//                                    val components = extraInfo.optJSONArray("components")
+//                                    val body = (0 until (components?.length() ?: 0))
+//                                        .mapNotNull { components?.optJSONObject(it) }
+//                                        .firstOrNull { it.optString("type") == "body" }
+//
+//                                    val params = body?.optJSONArray("parameters")
+//                                    val values = (0 until (params?.length() ?: 0)).map { i ->
+//                                        params!!.getJSONObject(i).optString("text")
+//                                    }
+//
+//                                    val templateText = templateBodyMap[name] ?: name
+//                                    values.foldIndexed(templateText) { index, acc, v ->
+//                                        acc.replace("{{${index + 1}}}", v)
+//                                    }
+//                                } catch (e: Exception) {
+//                                    Log.e("TEMPLATE_ERR", "Template parse failed", e)
+//                                    "Template Message"
+//                                }
+//                            } else "Template Message"
+//                        }
+//
+//                        else -> obj.optString("message_body", "")
+//                    }
+//
+//                    var sender = obj.optString("sender") ?: ""
+//                    if (sender.isEmpty()) {
+//                        val waIdFromMsg = obj.optString("wa_id") ?: ""
+//                        val currentUserWaId = intent.getStringExtra("wa_id_or_sender") ?: ""
+//                        if (waIdFromMsg == currentUserWaId) sender = "you"
+//                    }
+//
+//                    var imageUrl: String? = obj.optString("url")
+//                    if (imageUrl.isNullOrBlank() || imageUrl == "null") {
+//                        imageUrl = obj.optString("file_url")
+//                    }
+//
+//                    var caption: String? = null
+//
+//                    if (caption.isNullOrBlank()) {
+//                        val extra = obj.optString("extra_info")
+//                        if (!extra.isNullOrBlank() && extra != "null") {
+//                            try {
+//                                val json = JSONObject(extra)
+//                                caption = json.optString("caption", null)
+//                            } catch (e: Exception) {
+//                                Log.e("CAPTION_RESTORE", "Failed to parse caption from extra_info", e)
+//                            }
+//                        }
+//
+//                        if (caption.isNullOrBlank() && messageType == "document") {
+//                            caption = obj.optString("filename", null)
+//                        }
+//                    }
+//
+//                    if (caption.isNullOrBlank() && messageType in listOf("image", "video", "document")) {
+//                        caption = messageBody
+//                    }
+//
+//                    if (messageType == "image" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
+//                        try {
+//                            if (!extraInfoStr.isNullOrBlank() && extraInfoStr != "null") {
+//                                val extraInfo = JSONObject(extraInfoStr)
+//                                val mediaId = extraInfo.optString("media_id")
+//                                Log.d("PREF_READ", "Trying to restore image for media_id=$mediaId")
+//                                if (!mediaId.isNullOrBlank()) {
+//                                    val cachedUrl = prefs.getString(mediaId, null)
+//                                    Log.d("PREF_READ_RESULT", "Restored from prefs: $mediaId → $cachedUrl")
+//                                    if (!cachedUrl.isNullOrBlank()) {
+//                                        imageUrl = cachedUrl
+//                                    }
+//                                }
+//                            }
+//                        } catch (e: Exception) {
+//                            Log.e("IMG_RESTORE", "Failed to parse extra_info", e)
+//                        }
+//                    }
+//
+//                    if (messageType == "template" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
+//                        val restored = resolveTemplateImageFromPrefs(prefs, extraInfoStr)
+//                        if (!restored.isNullOrBlank()) {
+//                            imageUrl = restored
+//                            Log.d("IMG_RESTORE", "Restored template image from prefs → $imageUrl")
+//                        }
+//                    }
+//
+//                    val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
+//                    if (messageBody.isEmpty() && messageType != "image") return@JsonArrayRequest
+//
+//                    val componentDataJson: String? = try {
+//                        val name = JSONObject(extraInfoStr).optString("name")
+//                        templateFullMap[name]?.optString("component_data")
+//                    } catch (e: Exception) {
+//                        null
+//                    }
+//
+//                    val message = Message(
+//                        sender = if (sender.isEmpty()) null else sender,
+//                        messageBody = messageBody,
+//                        messageType = messageType,
+//                        timestamp = timestamp,
+//                        url = imageUrl,
+//                        recipientId = obj.optString("recipient_id"),
+//                        waId = obj.optString("wa_id"),
+//                        extraInfo = extraInfoStr,
+//                        componentData = componentDataJson,
+//                        sent = obj.optInt("sent", 0),
+//                        delivered = obj.optInt("delivered", 0),
+//                        read = obj.optInt("read", 0),
+//                        caption = caption,
+//                    )
+//
+//                    collectedMessages.add(message)
+//                }
+//
+//                // Recursive call for next page
+//                if (page < totalPages) {
+//                    loadMessages(page + 1, totalPages, collectedMessages)
+//                } else {
+//                    // Final page reached
+//                    collectedMessages.reverse()
+//                    adapter.setMessages(collectedMessages)
+//                    binding.recyclerViewMessages.post {
+//                        binding.recyclerViewMessages.scrollToPosition(collectedMessages.size - 1)
+//                        Log.d("PAGINATION", "Loaded ${collectedMessages.size} messages")
+//
+//                    }
+//                }
+//            },
+//            { error ->
+//                Log.e("Volley", "Error loading page $page", error)
+//                Toast.makeText(this, "Failed to load messages", Toast.LENGTH_SHORT).show()
+//            })
+//
+//        Volley.newRequestQueue(this).add(request)
+//    }
+
+
     fun loadMessages() {
         val number = intent.getStringExtra("wa_id_or_sender") ?: return
         val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/1"
@@ -913,16 +1129,29 @@ class Display_chat : AppCompatActivity() {
                             try {
                                 val json = JSONObject(extra)
                                 caption = json.optString("caption", null)
-                                Log.d("CAPTION_RESTORE", "Found caption in extra_info: $caption")
                             } catch (e: Exception) {
-                                Log.e("CAPTION_RESTORE", "Failed to parse caption from extra_info", e)
+                                Log.e(
+                                    "CAPTION_RESTORE",
+                                    "Failed to parse caption from extra_info",
+                                    e
+                                )
                             }
+                        }
+
+
+                        if (caption.isNullOrBlank() && messageType == "document") {
+                            caption = obj.optString("filename", null)
                         }
                     }
 
-                    if (caption.isNullOrBlank() && messageType in listOf("image", "video", "document")) {
+
+                    if (caption.isNullOrBlank() && messageType in listOf(
+                            "image",
+                            "video",
+                            "document"
+                        )
+                    ) {
                         caption = messageBody
-                        Log.d("CAPTION_ASSIGN", "Assigned caption from message_body: $caption")
                     }
 
 
@@ -1005,6 +1234,7 @@ class Display_chat : AppCompatActivity() {
 
         Volley.newRequestQueue(this).add(request)
     }
+
 
     fun resolveTemplateImageFromPrefs(prefs: SharedPreferences, extraInfoStr: String?): String? {
         if (extraInfoStr.isNullOrBlank()) return null
@@ -1143,7 +1373,7 @@ class Display_chat : AppCompatActivity() {
             }
 
             when (requestCode) {
-                1001,1003 ,1002-> {
+                1001, 1003, 1002 -> {
                     showImagePreviewDialog(uri, mimeType)
                 }
 
@@ -1202,7 +1432,7 @@ class Display_chat : AppCompatActivity() {
                 prefs.edit().putString(metaMediaId, s3Url).apply()
                 Log.d("PREF_WRITE", "Saved $metaMediaId → $s3Url")
 
-                sendMediaMessage(s3Url, fileType, waId, phoneNumberId, accessToken,caption)
+                sendMediaMessage(s3Url, fileType, waId, phoneNumberId, accessToken, caption)
 
                 val messageType = when {
                     fileType.startsWith("image") -> "image"
@@ -1417,10 +1647,11 @@ class Display_chat : AppCompatActivity() {
         }
 
         dialog.show()
-        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
-
-
 
 
     fun getFileNameFromUri(context: Context, uri: Uri): String {
@@ -1442,7 +1673,6 @@ class Display_chat : AppCompatActivity() {
     }
 
 
-
     fun getCountryIsoFromPhoneNumber(rawNumber: String): String? {
         val phoneNumberUtil = PhoneNumberUtil.getInstance()
         return try {
@@ -1453,11 +1683,40 @@ class Display_chat : AppCompatActivity() {
             null
         }
     }
+
     fun countryCodeToFlagEmoji(isoCode: String): String {
         return isoCode
             .uppercase()
             .map { char -> Character.toChars(0x1F1E6 - 'A'.code + char.code).concatToString() }
             .joinToString("")
     }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.profile, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.viewProfile -> {
+                val profileIntent = Intent(this, ProfileActivity::class.java)
+                profileIntent.putExtra("ContactName", name ?: "Unknown")
+                profileIntent.putExtra("ContactNumber", number ?: "Unknown")
+                profileIntent.putExtra("User_Name", userName)
+                profileIntent.putExtra("first_message_date",fMsgDate)
+                profileIntent.putExtra("last_message_date",lMsgDate)
+                profileIntent.putExtra("Active",isActiveLast24Hours)
+                profileIntent.putExtra("Flag",flagEmoji)
+                startActivity(profileIntent)
+                Log.d("DisplayActivity", "Name is : " + name)
+                true
+
+
+            }
+
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
 
 }

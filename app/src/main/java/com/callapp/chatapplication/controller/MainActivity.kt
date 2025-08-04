@@ -77,12 +77,16 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("wa_id_or_sender", chat.wa_id_or_sender)
             intent.putExtra("phoneNumberId", selectedPhoneNumberId)
             intent.putExtra("message_count", chat.message_count)
+            intent.putExtra("user_name", chat.user_name)
             intent.putExtra("active_last_24_hours", chat.active_last_24_hours)
+            intent.putExtra("first_message_date",chat.first_message_date)
+            intent.putExtra("last_message_date",chat.last_message_date)
+            intent.putExtra("Total_pages",chat.total_pages)
             startActivity(intent)
         }
         recyclerView.adapter = chatAdapter
 
-        // SearchView setup
+
         val searchView = findViewById<SearchView>(R.id.searchView)
         searchView.setIconifiedByDefault(false)
         searchView.isIconified = false

@@ -1,13 +1,18 @@
 package com.callapp.chatapplication.view
 
+import android.os.Build
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.recyclerview.widget.RecyclerView
 import com.callapp.chatapplication.R
 import com.callapp.chatapplication.model.Chat
+import java.time.LocalDate
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 class ChatAdapter(
     private var chats: List<Chat>,
@@ -23,7 +28,6 @@ class ChatAdapter(
         val txtContactNumber: TextView = itemView.findViewById(R.id.txtContactNumber)
         val txtMsgCnt: TextView = itemView.findViewById(R.id.txtMsgCnt)
         val activeDot : View = itemView.findViewById(R.id.activeDot)
-
         init {
             itemView.setOnClickListener {
                 val position = adapterPosition
@@ -40,12 +44,13 @@ class ChatAdapter(
         return ChatViewHolder(view)
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onBindViewHolder(holder: ChatViewHolder, position: Int) {
         val chat = filteredList[position]
 
         val name = chat.contact_name?.trim().orEmpty()
         holder.txtName.text = name
-        holder.txtContactNumber.text = chat.wa_id_or_sender ?: "-"
+        holder.txtContactNumber.text = formatDate(chat.last_message_date) ?: "-"
         holder.txtMsgCnt.text = "${chat.message_count} Messages"
         holder.txtInitial.text = getInitialsFromName(name)
         holder.activeDot.visibility = if (chat.active_last_24_hours) View.VISIBLE else View.GONE
@@ -56,6 +61,8 @@ class ChatAdapter(
         {
             holder.txtInitial.setBackgroundResource(R.drawable.bg_circle_initial_gray)
         }
+
+
 
 
     }
@@ -83,7 +90,8 @@ class ChatAdapter(
             originalList.filter {
                 val name = it.contact_name?.trim()?.lowercase().orEmpty()
                 val number = it.wa_id_or_sender?.trim()?.lowercase().orEmpty()
-                name.contains(trimmedQuery) || number.contains(trimmedQuery)
+                val user_name =it.user_name?.trim()?.lowercase().orEmpty()
+                name.contains(trimmedQuery) || number.contains(trimmedQuery) || user_name.contains(trimmedQuery)
             }.toMutableList()
         }
 
@@ -99,4 +107,27 @@ class ChatAdapter(
             .joinToString("")
         return if (initials.isNotEmpty()) initials else "?"
     }
-}
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun formatDate(dateString: String?): String {
+        if (dateString.isNullOrEmpty()) return "-"
+
+        return try {
+            val zonedDateTime = ZonedDateTime.parse(dateString)
+            val messageDate = zonedDateTime.toLocalDate()
+            val today = LocalDate.now()
+            val yesterday = today.minusDays(1)
+
+            when (messageDate) {
+                today -> "Today"
+                yesterday -> "Yesterday"
+                else -> {
+                    val formatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy")
+                    messageDate.format(formatter)
+                }
+            }
+        } catch (e: Exception) {
+            "-"
+        }
+    }
+
+    }

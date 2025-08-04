@@ -118,6 +118,8 @@ class MessageAdapter(
         else if (holder is DocumentViewHolder) {
             bindDocumentViewHolder(holder, message)
         }
+        Log.d("BINDING", "Binding msg #$position - type=${message.messageType}, sender=${message.sender}, body=${message.messageBody}")
+
 
     }
 
@@ -131,7 +133,6 @@ class MessageAdapter(
         } else {
             View.GONE
         }
-       // renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, holder.itemView.context)
         renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, message.componentData, holder.itemView.context)
 
 
@@ -148,27 +149,15 @@ class MessageAdapter(
         val templateTextView = holder.itemView.findViewById<TextView?>(R.id.imgMessage)
         templateTextView?.text = formatMessageText(message.messageBody ?: "")
 
-//
-//        if (!message.caption.isNullOrEmpty()) {
-//            holder.captionTextView?.text = message.caption
-//            holder.captionTextView?.visibility = View.VISIBLE
-//            Log.d("ADAPTER_CAPTION", "Showing caption: ${message.caption}")
-//        } else {
-//            holder.captionTextView?.visibility = View.GONE
-//            Log.d("ADAPTER_CAPTION", "No caption to show")
-//        }
 
-        val restoredCaption = getRestoredCaption(message)
-        if (!restoredCaption.isNullOrBlank()) {
-            holder.captionTextView?.text = restoredCaption
+        if (!message.caption.isNullOrEmpty() && message.caption != "null") {
+            holder.captionTextView?.text = message.caption
             holder.captionTextView?.visibility = View.VISIBLE
-            Log.d("ADAPTER_CAPTION", "Restored caption: $restoredCaption")
+            Log.d("ADAPTER_CAPTION", "Showing caption: ${message.caption}")
         } else {
             holder.captionTextView?.visibility = View.GONE
+            Log.d("ADAPTER_CAPTION", "No caption to show")
         }
-
-
-
         if (!imageUrl.isNullOrEmpty()) {
             holder.imageView.visibility = View.VISIBLE
             Glide.with(context).load(imageUrl).diskCacheStrategy(DiskCacheStrategy.ALL).into(holder.imageView)
@@ -212,7 +201,7 @@ class MessageAdapter(
 
         holder.player = player
 
-        if (!message.caption.isNullOrEmpty()) {
+        if (!message.caption.isNullOrEmpty() && message.caption != "null") {
             holder.captionTextView?.text = message.caption
             holder.captionTextView?.visibility = View.VISIBLE
             Log.d("ADAPTER_CAPTION", " caption shown: ${message.caption}")
@@ -247,7 +236,7 @@ class MessageAdapter(
         val filename = docUrl.substringAfterLast('/')
         holder.fileName.text = filename
 
-        if (!message.caption.isNullOrEmpty()) {
+        if (!message.caption.isNullOrEmpty() && message.caption != "null") {
             holder.captionTextView?.text = message.caption
             holder.captionTextView?.visibility = View.VISIBLE
             Log.d("ADAPTER_CAPTION", "Document caption shown: ${message.caption}")

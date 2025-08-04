@@ -4,4 +4,12 @@
         <item name="colorOnPrimary">@color/black</item>
         <item name="colorPrimary">@color/white</item>
     </style>
+
+    <!-- Toolbar Style for Black 3-dots -->
+    <style name="ToolbarLightIconStyle" parent="ThemeOverlay.AppCompat.Light" />
+
+    <!-- Menu popup style to keep white background and black text -->
+    <style name="ToolbarLightPopupStyle" parent="ThemeOverlay.AppCompat.Light">
+        <item name="android:textColor">#FFFFFF</item>
+    </style>
 </resources>
