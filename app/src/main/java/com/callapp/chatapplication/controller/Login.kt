@@ -23,13 +23,6 @@ class Login : AppCompatActivity() {
         val sharedPref = getSharedPreferences("auth_prefs", MODE_PRIVATE)
         val jwt = sharedPref.getString("jwt_token", null)
 
-//        if (!jwt.isNullOrEmpty()) {
-//
-//            startActivity(Intent(this, MainActivity::class.java))
-//            finish()
-//            return
-//        }
-
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->

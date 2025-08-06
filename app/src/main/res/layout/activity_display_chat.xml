@@ -7,6 +7,7 @@
     android:layout_height="match_parent"
     android:background="@color/white">
 
+    <!-- App Bar with Toolbar -->
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBar"
         android:layout_width="match_parent"
@@ -24,13 +25,14 @@
             app:titleTextColor="@android:color/black"
             app:subtitleTextColor="@android:color/black">
 
-        <LinearLayout
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
                 android:orientation="horizontal"
                 android:layout_gravity="end"
                 android:layout_marginEnd="@dimen/_10sdp"
                 android:gravity="center_vertical">
+
                 <TextView
                     android:id="@+id/txtTagInitial"
                     android:layout_width="40dp"
@@ -41,8 +43,7 @@
                     android:textStyle="bold"
                     android:textColor="@color/black"
                     android:background="@drawable/bg_tag_initials"
-                    android:layout_marginEnd="6dp"
-                    />
+                    android:layout_marginEnd="6dp" />
 
                 <TextView
                     android:id="@+id/txtTag"
@@ -61,7 +62,7 @@
             android:background="#DADADA" />
     </com.google.android.material.appbar.AppBarLayout>
 
-
+    <!-- Chat Body -->
     <LinearLayout
         android:id="@+id/chat_root"
         android:layout_width="match_parent"
@@ -70,7 +71,7 @@
         android:fitsSystemWindows="true"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Chat Messages -->
+        <!-- RecyclerView for messages -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerViewMessages"
             android:layout_width="match_parent"
@@ -81,7 +82,7 @@
             android:overScrollMode="never"
             android:scrollbars="none" />
 
-        <!-- Input Section -->
+        <!-- Message input bar -->
         <LinearLayout
             android:id="@+id/messageInputBar"
             android:layout_width="match_parent"
@@ -133,4 +134,18 @@
                 app:tint="@android:color/white" />
         </LinearLayout>
     </LinearLayout>
+
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/imgDown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="90dp"
+        android:visibility="gone"
+        app:srcCompat="@drawable/baseline_keyboard_double_arrow_down_24"
+        app:tint="@android:color/white"
+        app:fabSize="mini" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

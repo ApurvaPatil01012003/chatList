@@ -25,13 +25,15 @@
             android:textSize="13sp"
             android:textStyle="bold" />
 
-        <!-- Timestamp & Tick -->
+        <!-- Timestamp + Tick + Status -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_gravity="end"
-            android:layout_marginTop="6dp">
+            android:layout_marginTop="6dp"
+            android:gravity="end"
+            android:baselineAligned="false">
 
             <TextView
                 android:id="@+id/timestampText"
@@ -46,28 +48,25 @@
                 android:layout_height="16dp"
                 android:layout_marginStart="4dp"
                 android:src="@drawable/baseline_done_24"
-                android:visibility="visible"
                 app:tint="@color/black" />
+
+            <TextView
+                android:id="@+id/failedLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Failed"
+                android:textColor="@android:color/holo_red_dark"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Optional Buttons (e.g., quick replies) -->
+    <!-- Optional Buttons (for template etc.) -->
     <LinearLayout
         android:id="@+id/buttonContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:layout_marginTop="6dp" />
-
-    <!-- Failed Label -->
-    <TextView
-        android:id="@+id/failedLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Send Failed"
-        android:textColor="@android:color/holo_red_dark"
-        android:textSize="12sp"
-        android:layout_marginTop="2dp"
-        android:layout_marginEnd="12dp"
-  />
 </LinearLayout>

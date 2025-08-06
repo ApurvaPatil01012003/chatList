@@ -3,10 +3,12 @@ package com.callapp.chatapplication.view
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.text.Html
 import android.text.Spanned
 import android.util.Log
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,7 +17,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -118,7 +119,6 @@ class MessageAdapter(
         else if (holder is DocumentViewHolder) {
             bindDocumentViewHolder(holder, message)
         }
-        Log.d("BINDING", "Binding msg #$position - type=${message.messageType}, sender=${message.sender}, body=${message.messageBody}")
 
 
     }
@@ -128,15 +128,31 @@ class MessageAdapter(
         holder.buttonContainer?.removeAllViews()
         holder.timestampTextView.text = formatTimestamp(message.timestamp)
         renderStatusIcon(holder.tickImageView, message, holder.itemView)
-        holder.failedLabel.visibility = if (message.sender == "you" && message.sent == 0) {
-            View.VISIBLE
+
+        if (message.isSentByMe()) {
+            val status = getMessageStatus(message.sent, message.delivered, message.read)
+
+            if (status == "Failed") {
+                holder.tickImageView?.visibility = View.GONE
+                holder.failedLabel.visibility = View.VISIBLE
+                holder.failedLabel.text = status
+                holder.failedLabel.setTextColor(
+                    ContextCompat.getColor(holder.itemView.context, android.R.color.holo_red_dark)
+                )
+            } else {
+                holder.failedLabel.visibility = View.GONE
+                holder.tickImageView?.visibility = View.VISIBLE
+                renderStatusIcon(holder.tickImageView, message, holder.itemView)
+            }
         } else {
-            View.GONE
+            holder.failedLabel.visibility = View.GONE
+            holder.tickImageView?.visibility = View.GONE
         }
+
+
         renderButtons(holder.buttonContainer as LinearLayout?, message.extraInfo, message.componentData, holder.itemView.context)
-
-
     }
+
 
     private fun bindImageViewHolder(holder: ImageViewHolder, message: Message) {
         holder.timestampTextView.text = formatTimestamp(message.timestamp)
@@ -177,7 +193,25 @@ class MessageAdapter(
             }
         }
 
+        if (message.isSentByMe()) {
+            val status = getMessageStatus(message.sent, message.delivered, message.read)
 
+            if (status == "Failed") {
+                holder.tickImageView?.visibility = View.GONE
+                holder.failedLabel.visibility = View.VISIBLE
+                holder.failedLabel.text = status
+                holder.failedLabel.setTextColor(
+                    ContextCompat.getColor(holder.itemView.context, android.R.color.holo_red_dark)
+                )
+            } else {
+                holder.failedLabel.visibility = View.GONE
+                holder.tickImageView?.visibility = View.VISIBLE
+                renderStatusIcon(holder.tickImageView, message, holder.itemView)
+            }
+        } else {
+            holder.failedLabel.visibility = View.GONE
+            holder.tickImageView?.visibility = View.GONE
+        }
 
     }
 
@@ -215,6 +249,27 @@ class MessageAdapter(
             }
             context.startActivity(intent)
         }
+
+        if (message.isSentByMe()) {
+            val status = getMessageStatus(message.sent, message.delivered, message.read)
+
+            if (status == "Failed") {
+                holder.tickImageView?.visibility = View.GONE
+                holder.failedLabel.visibility = View.VISIBLE
+                holder.failedLabel.text = status
+                holder.failedLabel.setTextColor(
+                    ContextCompat.getColor(holder.itemView.context, android.R.color.holo_red_dark)
+                )
+            } else {
+                holder.failedLabel.visibility = View.GONE
+                holder.tickImageView?.visibility = View.VISIBLE
+                renderStatusIcon(holder.tickImageView, message, holder.itemView)
+            }
+        } else {
+            holder.failedLabel.visibility = View.GONE
+            holder.tickImageView?.visibility = View.GONE
+        }
+
     }
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
@@ -255,6 +310,26 @@ class MessageAdapter(
                 Toast.makeText(context, "No app found to open document", Toast.LENGTH_SHORT).show()
             }
         }
+
+        if (message.isSentByMe()) {
+            val status = getMessageStatus(message.sent, message.delivered, message.read)
+
+            if (status == "Failed") {
+                holder.tickImageView?.visibility = View.GONE
+                holder.failedLabel.visibility = View.VISIBLE
+                holder.failedLabel.text = status
+                holder.failedLabel.setTextColor(
+                    ContextCompat.getColor(holder.itemView.context, android.R.color.holo_red_dark)
+                )
+            } else {
+                holder.failedLabel.visibility = View.GONE
+                holder.tickImageView?.visibility = View.VISIBLE
+                renderStatusIcon(holder.tickImageView, message, holder.itemView)
+            }
+        } else {
+            holder.failedLabel.visibility = View.GONE
+            holder.tickImageView?.visibility = View.GONE
+        }
     }
 
     inner class VideoViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -263,6 +338,7 @@ class MessageAdapter(
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
         var player: ExoPlayer? = null
         val captionTextView: TextView? = view.findViewById(R.id.vedioCaption)
+        val failedLabel: TextView = view.findViewById(R.id.failedLabel)
     }
 
     inner class DocumentViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -271,6 +347,7 @@ class MessageAdapter(
         val timestampTextView: TextView = view.findViewById(R.id.timestampText)
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
         val captionTextView: TextView? = view.findViewById(R.id.documentCaption)
+        val failedLabel: TextView = view.findViewById(R.id.failedLabel)
     }
 
 
@@ -309,6 +386,7 @@ class MessageAdapter(
     private fun renderStatusIcon(tickImageView: ImageView?, message: Message, itemView: View) {
         if (message.isSentByMe()) {
             val statusIcon = when {
+
                 message.read == 1 -> R.drawable.baseline_done_readall_24
                 message.delivered == 1 -> R.drawable.baseline_done_all_24
                 message.sent == 1 -> R.drawable.baseline_done_24
@@ -336,7 +414,7 @@ class MessageAdapter(
         val tickImageView: ImageView? = view.findViewById(R.id.statusTick)
         var buttonContainer: ViewGroup? = view.findViewById(R.id.buttonContainer)
         val captionTextView: TextView? = view.findViewById(R.id.imageCaption)
-
+        val failedLabel: TextView = view.findViewById(R.id.failedLabel)
 
     }
 
@@ -416,8 +494,19 @@ class MessageAdapter(
             textSize = 14f
             isAllCaps = false
             setPadding(12, 8, 12, 8)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = ContextCompat.getDrawable(context, R.drawable.bg_fab_circle)
+            val widthInDp = 350
+            val heightInDp = 48
+            val scale = context.resources.displayMetrics.density
+            layoutParams = ViewGroup.LayoutParams(
+                (widthInDp * scale).toInt(),
+                (heightInDp * scale).toInt()
+            )
         }
     }
+
 
     private fun handleButtonClick(
         subType: String,
@@ -448,7 +537,6 @@ class MessageAdapter(
             }
         }
     }
-
     private fun renderButtons(
         container: LinearLayout?,
         extraInfo: String?,
@@ -460,52 +548,62 @@ class MessageAdapter(
         container.removeAllViews()
 
         try {
-            val components: JSONArray = when {
-                !componentData.isNullOrEmpty() -> JSONArray(componentData)
-                !extraInfo.isNullOrEmpty() -> JSONObject(extraInfo).optJSONArray("components") ?: return
-                else -> return
+            val extraJson = if (!extraInfo.isNullOrEmpty()) JSONObject(extraInfo) else null
+            val buttonsArray = extraJson?.optJSONArray("buttons")
+
+            if (buttonsArray != null && buttonsArray.length() > 0) {
+                for (i in 0 until buttonsArray.length()) {
+                    val btn = buttonsArray.getJSONObject(i)
+                    val type = btn.optString("type")
+                    val label = btn.optString("text")
+                    val param = btn.optString("param")
+
+                    val button = createChatButton(context, label)
+
+                    button.setOnClickListener {
+                        when (type.uppercase()) {
+                            "URL" -> {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(param))
+                                context.startActivity(intent)
+                            }
+                            "PHONE_NUMBER" -> {
+                                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$param"))
+                                context.startActivity(intent)
+                            }
+                            "QUICK_REPLY" -> {
+                                Toast.makeText(context, "Quick reply: $label", Toast.LENGTH_SHORT).show()
+                            }
+                            else -> {
+                                Toast.makeText(context, "Unknown button type: $type", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+
+                    container.addView(button)
+                }
+                return
             }
+            val components = if (!componentData.isNullOrEmpty()) JSONArray(componentData)
+            else JSONObject(extraInfo ?: "{}").optJSONArray("components") ?: return
+
 
             for (i in 0 until components.length()) {
                 val comp = components.getJSONObject(i)
+                if (comp.optString("type") == "button") {
+                    val parameters = comp.optJSONArray("parameters")
+                    val subType = comp.optString("sub_type")
+                    val index = comp.optInt("index", i)
 
-                if (comp.optString("type") == "BUTTONS") {
-                    val buttons = comp.optJSONArray("buttons") ?: continue
+                    val param = parameters?.optJSONObject(0)?.optString("text") ?: continue
+                    val label = "Action ${index + 1}" // Placeholder label
 
-                    for (j in 0 until buttons.length()) {
-                        val btn = buttons.getJSONObject(j)
-                        val type = btn.optString("type")
-                        val label = btn.optString("text")
+                    val button = createChatButton(context, label)
 
-                        val button = createChatButton(context, label)
-
-                        button.setOnClickListener {
-                            val param = btn.optString("param")
-                            when (type.uppercase()) {
-                                "URL" -> {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(param))
-                                    context.startActivity(intent)
-                                }
-
-                                "PHONE_NUMBER" -> {
-                                    val intent = Intent(Intent.ACTION_DIAL).apply {
-                                        data = Uri.parse("tel:$param")
-                                    }
-                                    context.startActivity(intent)
-                                }
-
-                                "QUICK_REPLY" -> {
-                                    Toast.makeText(context, "Quick reply: $label", Toast.LENGTH_SHORT).show()
-                                }
-
-                                else -> {
-                                    Toast.makeText(context, "Unknown button type: $type", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-
-                        container.addView(button)
+                    button.setOnClickListener {
+                        handleButtonClick(subType, parameters, label, context)
                     }
+
+                    container.addView(button)
                 }
             }
 
@@ -513,31 +611,15 @@ class MessageAdapter(
             Log.e("RENDER_BUTTONS", "Failed to render template buttons", e)
         }
     }
-    private fun getRestoredCaption(message: Message): String? {
-        if (!message.caption.isNullOrBlank()) return message.caption
 
-        // Safe check before JSON parsing
-        val extra = message.extraInfo
-        if (extra.isNullOrBlank() || extra == "null") return null
 
-        try {
-            val json = JSONObject(extra)
-            val captionFromExtra = json.optString("caption", null)
-            if (!captionFromExtra.isNullOrBlank()) return captionFromExtra
-
-            val mediaId = json.optString("media_id", "")
-            if (mediaId.isNotBlank()) {
-                val prefs = parentView.context.getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
-                return prefs.getString("caption_$mediaId", null)?.also {
-                    Log.d("CAPTION_FALLBACK", "Restored caption using media ID: $it")
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e("CAPTION_RESTORE", "Failed to restore caption: ${e.message}")
+    private fun getMessageStatus(sent: Int?, delivered: Int?, read: Int?): String {
+        return when {
+            read == 1 -> "Read"
+            delivered == 1 -> "Delivered"
+            sent == 1 -> "Sent"
+            else -> "Failed"
         }
-
-        return null
     }
 
 

@@ -37,6 +37,15 @@
         android:textSize="12sp"
         android:layout_gravity="end"
         android:layout_marginTop="4dp" />
+        <TextView
+            android:id="@+id/failedLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Failed"
+            android:textColor="@android:color/holo_red_dark"
+            android:textSize="10sp"
+            android:layout_marginStart="4dp"
+            android:visibility="gone" />
     <LinearLayout
         android:id="@+id/buttonContainer"
         android:layout_width="wrap_content"

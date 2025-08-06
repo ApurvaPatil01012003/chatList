@@ -91,7 +91,7 @@ class MainActivity : AppCompatActivity() {
         searchView.setIconifiedByDefault(false)
         searchView.isIconified = false
         searchView.clearFocus()
-        searchView.queryHint = "Search by name or number"
+        searchView.queryHint = "Search"
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?) = false
             override fun onQueryTextChange(newText: String?): Boolean {
