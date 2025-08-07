@@ -1034,15 +1034,7 @@ class Display_chat : AppCompatActivity() {
                         continue
                     }
 
-//                    val componentDataJson: String? = try {
-//                        val name = JSONObject(extraInfoStr).optString("name")
-//                        templateFullMap[name]?.optString("component_data")
-//                    } catch (_: Exception) { null }
-
-
                     val extraInfoJson = try { JSONObject(extraInfoStr) } catch (_: Exception) { JSONObject() }
-
-// Rebuild "buttons" from templateButtonsMap if not already present
                     if (!extraInfoJson.has("buttons")) {
                         val name = extraInfoJson.optString("name")
                         val storedButtons = templateButtonsMap[name]

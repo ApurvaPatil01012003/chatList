@@ -8,6 +8,7 @@ import android.net.Uri
 import android.text.Html
 import android.text.Spanned
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -488,26 +489,41 @@ class MessageAdapter(
         }
     }
 
-    private fun createChatButton(context: Context, text: String): Button {
-        return Button(context).apply {
-            this.text = text
-            textSize = 14f
-            isAllCaps = false
-            setPadding(12, 8, 12, 8)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = ContextCompat.getDrawable(context, R.drawable.bg_fab_circle)
-            val widthInDp = 350
-            val heightInDp = 48
-            val scale = context.resources.displayMetrics.density
-            layoutParams = ViewGroup.LayoutParams(
-                (widthInDp * scale).toInt(),
-                (heightInDp * scale).toInt()
-            )
+    private fun createChatButton(context: Context, text: String, isLast: Boolean = false): Button {
+        val button = Button(context)
+        button.text = text
+        button.textSize = 14f
+        button.isAllCaps = false
+        button.setPadding(12, 8, 12, 8)
+        button.setTextColor(Color.WHITE)
+        button.gravity = Gravity.CENTER
+        button.background = ContextCompat.getDrawable(context, R.drawable.bg_fab_circle)
+
+        val displayMetrics = context.resources.displayMetrics
+        val screenWidthPx = displayMetrics.widthPixels
+        val buttonWidth = (screenWidthPx * 0.8).toInt()
+        val heightInDp = 48f
+        val buttonHeight = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            heightInDp,
+            displayMetrics
+        ).toInt()
+
+        val params = LinearLayout.LayoutParams(buttonWidth, buttonHeight)
+        params.gravity = Gravity.CENTER
+
+        if (!isLast) {
+            val marginBottomInDp = 8f
+            params.bottomMargin = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                marginBottomInDp,
+                displayMetrics
+            ).toInt()
         }
+
+        button.layoutParams = params
+        return button
     }
-
-
     private fun handleButtonClick(
         subType: String,
         parameters: JSONArray?,
