@@ -21,7 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var chatAdapter: ChatAdapter
     private var selectedPhoneNumberId: String? = null
 
-
+private var accessToken: String?=null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         setSupportActionBar(binding.toolbar)
 
+         accessToken = intent.getStringExtra("Token")?:""
         @Suppress("UNCHECKED_CAST")
         val phoneNumberList = intent.getSerializableExtra("phone_number_list") as? ArrayList<Pair<Long, String>> ?: arrayListOf()
         val phoneNumberIds = phoneNumberList.map { it.first.toString() }
@@ -41,15 +42,15 @@ class MainActivity : AppCompatActivity() {
 
         spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
-                parent: android.widget.AdapterView<*>,
-                view: android.view.View,
+                parent: android.widget.AdapterView<*>?,
+                view: android.view.View?,
                 position: Int,
                 id: Long
             ) {
                 selectedPhoneNumberId = phoneNumberIds[position] // Save selected ID
-                val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+              //  val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
 
-                chatController.fetchChats(selectedPhoneNumberId!!, accessToken,
+                chatController.fetchChats(selectedPhoneNumberId!!, accessToken.toString(),
                     onSuccess = { chatList ->
                         binding.textTotal.text = "Total : ${chatList.size}"
                         val active = chatList.count { it.active_last_24_hours }
@@ -83,6 +84,7 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra("first_message_date",chat.first_message_date)
             intent.putExtra("last_message_date",chat.last_message_date)
             intent.putExtra("Total_pages",chat.total_pages)
+            intent.putExtra("Token",accessToken)
             startActivity(intent)
         }
         recyclerView.adapter = chatAdapter
@@ -103,9 +105,9 @@ class MainActivity : AppCompatActivity() {
 
         if (phoneNumberIds.isNotEmpty()) {
             val phoneNumberId = phoneNumberIds[0]
-            val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+           // val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
 
-            chatController.fetchChats(phoneNumberId, accessToken,
+            chatController.fetchChats(phoneNumberId, accessToken.toString(),
                 onSuccess = { chatList ->
                     binding.textTotal.text = "Total : ${chatList.size}"
                     val active = chatList.count { it.active_last_24_hours }

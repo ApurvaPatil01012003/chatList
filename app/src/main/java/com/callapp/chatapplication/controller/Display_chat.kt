@@ -29,10 +29,12 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
+import androidx.appcompat.widget.SearchView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -70,8 +72,6 @@ class Display_chat : AppCompatActivity() {
     private lateinit var binding: ActivityDisplayChatBinding
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MessageAdapter
-
-    //  val phoneNumberId = "361462453714220"
     lateinit var phoneNumberId: String
 
     private lateinit var waId: String
@@ -89,6 +89,19 @@ class Display_chat : AppCompatActivity() {
     private var isLoading = false
     private var allMessagesLoaded = false
     private val allMessages = mutableListOf<Message>()
+    private var accessToken :String? =null
+
+    private lateinit var layoutSearch: LinearLayout
+    private lateinit var layoutTitleNormal: LinearLayout
+    private lateinit var editSearch: EditText
+    private lateinit var btnSearchBack: ImageButton
+    private lateinit var btnSearch: MenuItem
+    private var matchIndexes: List<Int> = emptyList()
+
+    private var currentSearchIndex = -1
+    private var pendingScrollToMatch: String? = null
+    private val visitedMatches = mutableSetOf<Int>()
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,7 +117,7 @@ class Display_chat : AppCompatActivity() {
         }
         isActiveLast24Hours = intent.getBooleanExtra("active_last_24_hours", true)
 
-
+        accessToken=intent.getStringExtra("Token")
         name = intent.getStringExtra("contact_name")
         number = intent.getStringExtra("wa_id_or_sender")
         waId = intent.getStringExtra("wa_id_or_sender") ?: ""
@@ -112,6 +125,7 @@ class Display_chat : AppCompatActivity() {
         userName = intent.getStringExtra("user_name") ?: ""
         fMsgDate=intent.getStringExtra("first_message_date")?:""
         lMsgDate =intent.getStringExtra("last_message_date")?:""
+
         loadMessages(page = 1)
         if (!userName.isNullOrBlank() && userName != "null") {
             val initial = userName!!.trim().firstOrNull()?.uppercaseChar() ?: 'N'
@@ -120,6 +134,11 @@ class Display_chat : AppCompatActivity() {
         } else {
             binding.txtTagInitial.visibility = View.GONE
         }
+        layoutTitleNormal = findViewById(R.id.layoutTitleNormal)
+
+        layoutSearch = findViewById(R.id.layoutSearch)
+        editSearch = findViewById(R.id.editSearch)
+        btnSearchBack = findViewById(R.id.btnSearchBack)
 
 
         setSupportActionBar(binding.toolbar)
@@ -187,7 +206,7 @@ class Display_chat : AppCompatActivity() {
         binding.buttonSend.setOnClickListener {
             val text = binding.editTextMessage.text.toString().trim()
             val waId = intent.getStringExtra("wa_id_or_sender") ?: return@setOnClickListener
-            val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+          //  val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
 
             if (text.isNotEmpty()) {
                 val isSent = if (isActiveLast24Hours) 1 else 0
@@ -208,19 +227,12 @@ class Display_chat : AppCompatActivity() {
                 binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
                 binding.editTextMessage.setText("")
 
-//                if (!isActiveLast24Hours) {
-//                    Toast.makeText(
-//                        this,
-//                        "Message failed: Contact inactive for 24+ hours",
-//                        Toast.LENGTH_SHORT
-//                    ).show()
-//                    return@setOnClickListener
-//                }
+
                 sendTextMessage(
                     to = waId,
                     text = text,
                     phoneNumberId = phoneNumberId,
-                    accessToken = accessToken,
+                    accessToken = accessToken.toString(),
                     onSuccess = {
                         Toast.makeText(this, "Message Sent", Toast.LENGTH_SHORT).show()
                     },
@@ -259,10 +271,76 @@ class Display_chat : AppCompatActivity() {
             showAttachmentPopup()
         }
 
+        btnSearchBack = findViewById(R.id.btnSearchBack)
+
+        btnSearchBack.setOnClickListener {
+            hideSearchBar()
+        }
+        editSearch.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                val query = s.toString().trim()
+                adapter.setSearchQuery(query)
+                visitedMatches.clear()
+
+                val highlights = adapter.getHighlightedPositions()
+                if (highlights.isNotEmpty()) {
+                    currentSearchIndex = highlights.last()  // Jump to most recent match (bottom-most)
+                    recyclerView.scrollToPosition(currentSearchIndex)
+                    visitedMatches.add(currentSearchIndex)
+                } else {
+                    currentSearchIndex = -1
+                }
+            }
+
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+        binding.btnPrev.setOnClickListener {
+            val highlights = adapter.getHighlightedPositions().sorted()
+            val nextIndex = highlights.firstOrNull { it > currentSearchIndex }
+
+            if (nextIndex != null) {
+                currentSearchIndex = nextIndex
+                recyclerView.scrollToPosition(currentSearchIndex)
+                visitedMatches.add(currentSearchIndex)
+            } else {
+
+                val query = editSearch.text.toString().trim()
+                if (query.isNotEmpty() && !allMessagesLoaded) {
+                    pendingScrollToMatch = query
+                    currentPage += 1
+                    loadMessages(page = currentPage, appendToTop = false) // 👈 Load next messages (newer)
+                } else {
+                    Toast.makeText(this, "Reached latest match", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+
+
+        binding.btnNext.setOnClickListener {
+            val highlights = adapter.getHighlightedPositions()
+            val prevIndex = highlights.lastOrNull { it < currentSearchIndex }
+
+            if (prevIndex != null) {
+                currentSearchIndex = prevIndex
+                recyclerView.scrollToPosition(currentSearchIndex)
+                visitedMatches.add(currentSearchIndex)
+            } else {
+
+                val query = editSearch.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    pendingScrollToMatch = query
+                    currentPage += 1
+                    loadMessages(page = currentPage, appendToTop = true)
+                }
+            }
+        }
+
+
+
 
     }
-
-
     fun sendTextMessage(
         to: String,
         text: String,
@@ -311,7 +389,8 @@ class Display_chat : AppCompatActivity() {
 
     fun fetchTemplates(onResult: (List<JSONObject>) -> Unit, onError: (String) -> Unit) {
         val url =
-            "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+           // "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+            "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=$accessToken"
 
         val request = JsonObjectRequest(Request.Method.GET, url, null,
             { response ->
@@ -654,7 +733,8 @@ class Display_chat : AppCompatActivity() {
         ) {
             override fun getHeaders(): MutableMap<String, String> {
                 return mutableMapOf(
-                    "Authorization" to "Bearer Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+                   // "Authorization" to "Bearer Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+                    "Authorization" to "Bearer $accessToken",
                     "Content-Type" to "application/json"
                 )
             }
@@ -951,6 +1031,9 @@ class Display_chat : AppCompatActivity() {
 
                 val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
                 val newMessages = mutableListOf<Message>()
+                var foundNewMatches = false
+                val matchIndexesForThisPage = mutableListOf<Int>()
+
 
                 if (response.length() == 0) {
                     allMessagesLoaded = true
@@ -1077,7 +1160,9 @@ class Display_chat : AppCompatActivity() {
                             componentData = componentDataJson,
 
                             )
+
                     )
+
                 }
 
                 Log.d("PAGE_DEBUG", "Loaded page $page with ${newMessages.size} messages")
@@ -1096,6 +1181,17 @@ class Display_chat : AppCompatActivity() {
                     allMessages.sortBy { it.timestamp }
                     adapter.setMessages(allMessages)
                     binding.recyclerViewMessages.scrollToPosition(allMessages.size - 1)
+                }
+                pendingScrollToMatch?.let { query ->
+                    val newMatches = adapter.getHighlightedPositions().filter { !visitedMatches.contains(it) }
+                    if (newMatches.isNotEmpty()) {
+                        currentSearchIndex = newMatches.last()
+                        binding.recyclerViewMessages.scrollToPosition(currentSearchIndex)
+                        visitedMatches.add(currentSearchIndex)
+                    } else {
+                        Log.d("SEARCH_NAV", "No new matches found in loaded page.")
+                    }
+                    pendingScrollToMatch = null
                 }
 
 
@@ -1287,6 +1383,7 @@ class Display_chat : AppCompatActivity() {
             fileData = fileData,
             fileName = fileName,
             fileType = fileType,
+            accessToken = accessToken,
             listener = Response.Listener { response ->
 
                 val metaMediaId = response.optString("metaMediaId", "")
@@ -1447,7 +1544,9 @@ class Display_chat : AppCompatActivity() {
                 return mutableMapOf(
                     "Authorization" to "Bearer $accessToken",
                     "Content-Type" to "application/json"
+
                 )
+
             }
         }
 
@@ -1507,7 +1606,8 @@ class Display_chat : AppCompatActivity() {
                 mimeType,
                 waId,
                 phoneNumberId,
-                "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+               // "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+                "$accessToken",
                 caption
             )
         }
@@ -1566,10 +1666,16 @@ class Display_chat : AppCompatActivity() {
             .joinToString("")
     }
 
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.profile, menu)
+
+        btnSearch = menu.findItem(R.id.action_search)
+
+
         return true
     }
+
+
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
@@ -1583,14 +1689,49 @@ class Display_chat : AppCompatActivity() {
                 profileIntent.putExtra("Active",isActiveLast24Hours)
                 profileIntent.putExtra("Flag",flagEmoji)
                 startActivity(profileIntent)
-                Log.d("DisplayActivity", "Name is : " + name)
                 true
 
 
             }
+            R.id.action_search -> {
+                showSearchBar()
+                true
+            }
 
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun showSearchBar() {
+        layoutTitleNormal.visibility = View.GONE
+        layoutSearch.visibility = View.VISIBLE
+        editSearch.requestFocus()
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        btnSearch.isVisible = false
+    }
+
+    private fun hideSearchBar() {
+        layoutSearch.visibility = View.GONE
+        layoutTitleNormal.visibility = View.VISIBLE
+        editSearch.setText("")
+        adapter.clearHighlights()
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
+        btnSearch.isVisible = true
+    }
+
+
+    fun findNextMatchIndex(current: Int): Int {
+        val highlights = adapter.getHighlightedPositions()
+        if (highlights.isEmpty()) return -1
+        val nextIndex = highlights.indexOfFirst { it > current }
+        return if (nextIndex == -1) highlights.first() else highlights[nextIndex]
+    }
+
+    fun findPreviousMatchIndex(current: Int): Int {
+        val highlights = adapter.getHighlightedPositions()
+        if (highlights.isEmpty()) return -1
+        val prevIndex = highlights.indexOfLast { it < current }
+        return if (prevIndex == -1) highlights.last() else highlights[prevIndex]
     }
 
 

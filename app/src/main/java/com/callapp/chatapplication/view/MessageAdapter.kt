@@ -36,7 +36,9 @@ import java.util.*
 
 class MessageAdapter(
     private var messages: List<Message>,
-    private val parentView: ViewGroup
+    private val parentView: ViewGroup,
+    private var searchQuery: String = ""
+
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -427,15 +429,22 @@ class MessageAdapter(
         newList.add(message)
         setMessages(newList)
     }
-
     fun formatMessageText(rawText: String): Spanned {
-        val html = rawText
+        var html = rawText
             .replace(Regex("\\*(.*?)\\*"), "<b>$1</b>")
             .replace(Regex("_(.*?)_"), "<i>$1</i>")
             .replace(Regex("~(.*?)~"), "<del>$1</del>")
             .replace("\n", "<br>")
+
+        if (searchQuery.isNotEmpty()) {
+            val escapedQuery = Regex.escape(searchQuery)
+            val highlightRegex = Regex("(?i)($escapedQuery)")
+            html = html.replace(highlightRegex, "<span style=\"background-color:yellow\">$1</span>")
+        }
+
         return Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY)
     }
+
 
     fun formatTimestamp(timestamp: Long): String {
         val messageDate = Date(timestamp * 1000)
@@ -611,7 +620,7 @@ class MessageAdapter(
                     val index = comp.optInt("index", i)
 
                     val param = parameters?.optJSONObject(0)?.optString("text") ?: continue
-                    val label = "Action ${index + 1}" // Placeholder label
+                    val label = "Action ${index + 1}"
 
                     val button = createChatButton(context, label)
 
@@ -621,7 +630,9 @@ class MessageAdapter(
 
                     container.addView(button)
                 }
+
             }
+
 
         } catch (e: Exception) {
             Log.e("RENDER_BUTTONS", "Failed to render template buttons", e)
@@ -636,6 +647,36 @@ class MessageAdapter(
             sent == 1 -> "Sent"
             else -> "Failed"
         }
+    }
+
+
+    fun getMessages(): List<Message> = messages
+
+    private var highlightedPositions = mutableListOf<Int>()
+
+    fun setSearchQuery(query: String) {
+        searchQuery = query
+        highlightedPositions.clear()
+
+        messages.forEachIndexed { index, message ->
+            val text = message.messageBody ?: ""
+            if (text.contains(query, ignoreCase = true)) {
+                highlightedPositions.add(index)
+            }
+        }
+
+        notifyDataSetChanged()
+    }
+
+    fun getHighlightedPositions(): List<Int> = highlightedPositions
+
+
+
+
+    fun clearHighlights() {
+        searchQuery = ""
+        highlightedPositions.clear()
+        notifyDataSetChanged()
     }
 
 

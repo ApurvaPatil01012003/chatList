@@ -60,6 +60,7 @@ class Login : AppCompatActivity() {
 
                 val success = response.optBoolean("success")
                 if (success) {
+                    val token = response.optString("token")
                     val jwt = response.optString("jwt")
                     val userType = response.optString("user_type")
                     val emailResponse = response.optString("email")
@@ -88,6 +89,7 @@ class Login : AppCompatActivity() {
 
                     val sharedPref = getSharedPreferences("auth_prefs", MODE_PRIVATE)
                     with(sharedPref.edit()) {
+                        putString("token",token)
                         putString("jwt_token", jwt)
                         putString("user_type", userType)
                         putString("email", emailResponse)
@@ -99,9 +101,11 @@ class Login : AppCompatActivity() {
 
                     val intent = Intent(this, MainActivity::class.java)
                     intent.putExtra("phone_number_list", ArrayList(phoneNumberList))
+                    intent.putExtra("Token",token)
                     startActivity(intent)
                     finish()
                     Log.d("PhoneNumberId","${ArrayList(phoneNumberList)}")
+                    Log.d("Token","Token is : $token")
 
                     Toast.makeText(this, "Login Successful", Toast.LENGTH_SHORT).show()
                 } else {

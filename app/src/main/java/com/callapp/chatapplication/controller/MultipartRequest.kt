@@ -14,6 +14,7 @@ class MultipartRequest(
     private val fileData: ByteArray,
     private val fileName: String,
     private val fileType: String,
+    private val accessToken: String,
     listener: Response.Listener<JSONObject>,
     errorListener: Response.ErrorListener
 ) : Request<JSONObject>(Method.POST, url, errorListener) {
@@ -26,8 +27,10 @@ class MultipartRequest(
 
     override fun getHeaders(): MutableMap<String, String> {
         return mutableMapOf(
-            "Authorization" to "Bearer Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+            "Authorization" to "Bearer $accessToken"
+
         )
+
     }
 
 //    override fun getBody(): ByteArray {
@@ -57,7 +60,6 @@ class MultipartRequest(
         bos.write(fileData)
         bos.write("\r\n".toByteArray())
 
-        // Final boundary
         writer.append("--$boundary--\r\n")
         writer.flush()
 
