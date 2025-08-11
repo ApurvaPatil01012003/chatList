@@ -34,7 +34,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
-import androidx.appcompat.widget.SearchView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -96,12 +95,13 @@ class Display_chat : AppCompatActivity() {
     private lateinit var editSearch: EditText
     private lateinit var btnSearchBack: ImageButton
     private lateinit var btnSearch: MenuItem
-    private var matchIndexes: List<Int> = emptyList()
 
-    private var currentSearchIndex = -1
-    private var pendingScrollToMatch: String? = null
-    private val visitedMatches = mutableSetOf<Int>()
+    private var matchPositions = mutableListOf<Int>()
+    private var matchPtr = -1
 
+    private var suppressAutoScroll = false
+    private var isSearchPaging = false
+    private val templateLanguageMap = mutableMapOf<String, String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -206,7 +206,7 @@ class Display_chat : AppCompatActivity() {
         binding.buttonSend.setOnClickListener {
             val text = binding.editTextMessage.text.toString().trim()
             val waId = intent.getStringExtra("wa_id_or_sender") ?: return@setOnClickListener
-          //  val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+            //  val accessToken = "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
 
             if (text.isNotEmpty()) {
                 val isSent = if (isActiveLast24Hours) 1 else 0
@@ -253,7 +253,7 @@ class Display_chat : AppCompatActivity() {
             },
             onError = {
                 Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
-               loadMessages()
+                loadMessages()
 
             }
         )
@@ -276,69 +276,58 @@ class Display_chat : AppCompatActivity() {
         btnSearchBack.setOnClickListener {
             hideSearchBar()
         }
+        // Replace your afterTextChanged with this
         editSearch.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
-                val query = s.toString().trim()
-                adapter.setSearchQuery(query)
-                visitedMatches.clear()
+                val q = s?.toString()?.trim().orEmpty()
 
-                val highlights = adapter.getHighlightedPositions()
-                if (highlights.isNotEmpty()) {
-                    currentSearchIndex = highlights.last()  // Jump to most recent match (bottom-most)
-                    recyclerView.scrollToPosition(currentSearchIndex)
-                    visitedMatches.add(currentSearchIndex)
+                adapter.setSearchQuery(q)
+                matchPositions = adapter.getHighlightedPositions().toMutableList()
+                matchPtr = -1
+
+                if (q.isEmpty()) return
+
+                if (matchPositions.isNotEmpty()) {
+                    // newest match in what we already have
+                    scrollToMatch(matchPositions.size - 1)
                 } else {
-                    currentSearchIndex = -1
+                    // nothing loaded yet → go fetch older pages until we find one
+                    findOlderPagesUntilMatch(q)
                 }
             }
-
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
-        binding.btnPrev.setOnClickListener {
-            val highlights = adapter.getHighlightedPositions().sorted()
-            val nextIndex = highlights.firstOrNull { it > currentSearchIndex }
-
-            if (nextIndex != null) {
-                currentSearchIndex = nextIndex
-                recyclerView.scrollToPosition(currentSearchIndex)
-                visitedMatches.add(currentSearchIndex)
-            } else {
-
-                val query = editSearch.text.toString().trim()
-                if (query.isNotEmpty() && !allMessagesLoaded) {
-                    pendingScrollToMatch = query
-                    currentPage += 1
-                    loadMessages(page = currentPage, appendToTop = false) // 👈 Load next messages (newer)
-                } else {
-                    Toast.makeText(this, "Reached latest match", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-
-
         binding.btnNext.setOnClickListener {
-            val highlights = adapter.getHighlightedPositions()
-            val prevIndex = highlights.lastOrNull { it < currentSearchIndex }
+            if (matchPositions.isEmpty()) return@setOnClickListener
 
-            if (prevIndex != null) {
-                currentSearchIndex = prevIndex
-                recyclerView.scrollToPosition(currentSearchIndex)
-                visitedMatches.add(currentSearchIndex)
+            if (matchPtr > 0) {
+                scrollToMatch(matchPtr - 1)
             } else {
-
-                val query = editSearch.text.toString().trim()
-                if (query.isNotEmpty()) {
-                    pendingScrollToMatch = query
+                val q = editSearch.text.toString().trim()
+                if (q.isNotEmpty() && !allMessagesLoaded && !isLoading) {
                     currentPage += 1
-                    loadMessages(page = currentPage, appendToTop = true)
+                    loadMessages(page = currentPage, appendToTop = true) {
+                        adapter.setSearchQuery(q)
+                        matchPositions = adapter.getHighlightedPositions().toMutableList()
+                        if (matchPositions.isNotEmpty()) {
+                            scrollToMatch(0)
+                        }
+                    }
+                } else {
+                    Toast.makeText(this, "Reached oldest match", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
-
-
+        binding.btnPrev.setOnClickListener {
+            if (matchPositions.isEmpty()) return@setOnClickListener
+            if (matchPtr < matchPositions.lastIndex) {
+                scrollToMatch(matchPtr + 1)
+            } else {
+                Toast.makeText(this, "Reached latest match", Toast.LENGTH_SHORT).show()
+            }
+        }
 
     }
     fun sendTextMessage(
@@ -389,7 +378,7 @@ class Display_chat : AppCompatActivity() {
 
     fun fetchTemplates(onResult: (List<JSONObject>) -> Unit, onError: (String) -> Unit) {
         val url =
-           // "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
+            // "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
             "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=$accessToken"
 
         val request = JsonObjectRequest(Request.Method.GET, url, null,
@@ -406,6 +395,11 @@ class Display_chat : AppCompatActivity() {
                     val template = templates?.getJSONObject(i) ?: continue
                     val name = template.optString("name")
                     val componentsStr = template.optString("components")
+
+                    // Store this when fetching templates
+                    val langCode = template.optString("language").ifBlank { "en_US" }
+                    templateLanguageMap[name] = langCode
+
 
 
                     try {
@@ -671,13 +665,16 @@ class Display_chat : AppCompatActivity() {
         }
 
 
+        val langCode = templateLanguageMap[name]
+            ?: template.optString("language").ifBlank { "en_US" }
+
         val payload = JSONObject().apply {
             put("messaging_product", "whatsapp")
             put("to", to)
             put("type", "template")
             put("template", JSONObject().apply {
                 put("name", name)
-                put("language", JSONObject().put("code", "en"))
+                put("language", JSONObject().put("code", langCode))
                 put("components", componentsArray)
             })
         }
@@ -733,7 +730,7 @@ class Display_chat : AppCompatActivity() {
         ) {
             override fun getHeaders(): MutableMap<String, String> {
                 return mutableMapOf(
-                   // "Authorization" to "Bearer Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+                    // "Authorization" to "Bearer Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
                     "Authorization" to "Bearer $accessToken",
                     "Content-Type" to "application/json"
                 )
@@ -1018,7 +1015,7 @@ class Display_chat : AppCompatActivity() {
         card.addView(scrollView)
         layout.addView(card)
     }
-    fun loadMessages(page: Int = 1, appendToTop: Boolean = false) {
+    fun loadMessages(page: Int = 1, appendToTop: Boolean = false, onFinish: (() -> Unit)? = null) {
         val number = intent.getStringExtra("wa_id_or_sender") ?: return
         val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/$page"
 
@@ -1031,8 +1028,6 @@ class Display_chat : AppCompatActivity() {
 
                 val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
                 val newMessages = mutableListOf<Message>()
-                var foundNewMatches = false
-                val matchIndexesForThisPage = mutableListOf<Int>()
 
 
                 if (response.length() == 0) {
@@ -1167,38 +1162,47 @@ class Display_chat : AppCompatActivity() {
 
                 Log.d("PAGE_DEBUG", "Loaded page $page with ${newMessages.size} messages")
 
+                // inside loadMessages(...) where you handle appendToTop / else
                 if (appendToTop) {
                     allMessages.addAll(0, newMessages)
                     allMessages.sortBy { it.timestamp }
                     adapter.setMessages(allMessages)
 
-
-                    binding.recyclerViewMessages.scrollToPosition(newMessages.size)
-                }
-                else {
+                    if (!suppressAutoScroll) {
+                        binding.recyclerViewMessages.scrollToPosition(newMessages.size)
+                    }
+                } else {
                     allMessages.clear()
                     allMessages.addAll(newMessages)
                     allMessages.sortBy { it.timestamp }
                     adapter.setMessages(allMessages)
-                    binding.recyclerViewMessages.scrollToPosition(allMessages.size - 1)
-                }
-                pendingScrollToMatch?.let { query ->
-                    val newMatches = adapter.getHighlightedPositions().filter { !visitedMatches.contains(it) }
-                    if (newMatches.isNotEmpty()) {
-                        currentSearchIndex = newMatches.last()
-                        binding.recyclerViewMessages.scrollToPosition(currentSearchIndex)
-                        visitedMatches.add(currentSearchIndex)
-                    } else {
-                        Log.d("SEARCH_NAV", "No new matches found in loaded page.")
+
+                    if (!suppressAutoScroll) {
+                        binding.recyclerViewMessages.scrollToPosition(allMessages.size - 1)
                     }
-                    pendingScrollToMatch = null
                 }
 
+
+
+// ...later, when handling search matches for this page:
+                val q = editSearch.text.toString().trim()
+                if (q.isNotEmpty()) {
+                    adapter.setSearchQuery(q)
+                    matchPositions = adapter.getHighlightedPositions().toMutableList()
+
+                    // Only jump if we're NOT in background/bulk search
+                    if (!suppressAutoScroll && matchPositions.isNotEmpty()) {
+                        if (appendToTop) scrollToMatch(0) else scrollToMatch(matchPositions.size - 1)
+                    } else if (matchPositions.isEmpty()) {
+                        matchPtr = -1
+                    }
+                }
 
             },
             { error ->
                 isLoading = false
                 Log.e("LOAD_ERROR", "Failed to load page $page", error)
+                onFinish?.invoke()
             })
 
         Volley.newRequestQueue(this).add(request)
@@ -1436,7 +1440,7 @@ class Display_chat : AppCompatActivity() {
                     caption = caption,
                     extraInfo = extraInfoJson.toString(),
 
-                )
+                    )
 
                 Log.d("extraonfo", "$extraInfoJson")
 
@@ -1606,7 +1610,7 @@ class Display_chat : AppCompatActivity() {
                 mimeType,
                 waId,
                 phoneNumberId,
-               // "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
+                // "Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7",
                 "$accessToken",
                 caption
             )
@@ -1702,13 +1706,28 @@ class Display_chat : AppCompatActivity() {
         }
     }
 
+//    private fun showSearchBar() {
+//        layoutTitleNormal.visibility = View.GONE
+//        layoutSearch.visibility = View.VISIBLE
+//        editSearch.requestFocus()
+//        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+//        btnSearch.isVisible = false
+//    }
+
     private fun showSearchBar() {
         layoutTitleNormal.visibility = View.GONE
         layoutSearch.visibility = View.VISIBLE
         editSearch.requestFocus()
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         btnSearch.isVisible = false
+
+        // fire and forget; no UI jumps
+        if (!allMessagesLoaded) {
+            Toast.makeText(this, "Fetching older messages in background…", Toast.LENGTH_SHORT).show()
+            prefetchAllHistoryFast()
+        }
     }
+
 
     private fun hideSearchBar() {
         layoutSearch.visibility = View.GONE
@@ -1720,18 +1739,220 @@ class Display_chat : AppCompatActivity() {
     }
 
 
-    fun findNextMatchIndex(current: Int): Int {
-        val highlights = adapter.getHighlightedPositions()
-        if (highlights.isEmpty()) return -1
-        val nextIndex = highlights.indexOfFirst { it > current }
-        return if (nextIndex == -1) highlights.first() else highlights[nextIndex]
+
+    private fun scrollToMatch(pointer: Int) {
+        if (pointer !in matchPositions.indices) return
+        val pos = matchPositions[pointer]
+        val lm = binding.recyclerViewMessages.layoutManager as LinearLayoutManager
+        // Small top offset so the matched row isn’t glued to the very top
+        lm.scrollToPositionWithOffset(pos, 80)
+        matchPtr = pointer
     }
 
-    fun findPreviousMatchIndex(current: Int): Int {
-        val highlights = adapter.getHighlightedPositions()
-        if (highlights.isEmpty()) return -1
-        val prevIndex = highlights.indexOfLast { it < current }
-        return if (prevIndex == -1) highlights.last() else highlights[prevIndex]
+
+    private fun findOlderPagesUntilMatch(query: String) {
+        if (isSearchPaging || allMessagesLoaded) return
+        isSearchPaging = true
+
+        fun step() {
+            if (allMessagesLoaded) {
+                isSearchPaging = false
+                Toast.makeText(this, "No matches found", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            currentPage += 1
+            loadMessages(page = currentPage, appendToTop = true) {
+                adapter.setSearchQuery(query)
+                matchPositions = adapter.getHighlightedPositions().toMutableList()
+
+                if (matchPositions.isNotEmpty()) {
+                    scrollToMatch(0)
+                    isSearchPaging = false
+                } else {
+
+                    step()
+                }
+            }
+        }
+
+        step()
+    }
+    private fun fetchPage(
+        page: Int,
+        onResult: (items: List<Message>, isLastPage: Boolean) -> Unit,
+        onError: (Throwable) -> Unit
+    ) {
+        val number = intent.getStringExtra("wa_id_or_sender") ?: return
+        val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/$page"
+
+        val req = JsonArrayRequest(Request.Method.GET, url, null,
+            { arr ->
+                if (arr.length() == 0) {
+                    onResult(emptyList(), true)
+                    return@JsonArrayRequest
+                }
+
+                val prefs = getSharedPreferences("image_url_cache", Context.MODE_PRIVATE)
+                val items = ArrayList<Message>(arr.length())
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val messageType = obj.optString("message_type", "text")
+                    val extraInfoStr = obj.optString("extra_info")
+
+                    val messageBody = if (messageType == "template") {
+                        try {
+                            val extraInfo = JSONObject(extraInfoStr)
+                            val name = extraInfo.optString("name")
+                            val comps = extraInfo.optJSONArray("components")
+                            val body = (0 until (comps?.length() ?: 0))
+                                .mapNotNull { comps?.optJSONObject(it) }
+                                .firstOrNull { it.optString("type") == "body" }
+                            val params = body?.optJSONArray("parameters")
+                            val values = (0 until (params?.length() ?: 0)).map { idx ->
+                                params!!.getJSONObject(idx).optString("text")
+                            }
+                            val templateText = templateBodyMap[name] ?: name
+                            values.foldIndexed(templateText) { idx, acc, v ->
+                                acc.replace("{{${idx + 1}}}", v)
+                            }
+                        } catch (_: Exception) { "Template Message" }
+                    } else obj.optString("message_body", "")
+
+                    var sender = obj.optString("sender")
+                    if (sender.isNullOrEmpty()) {
+                        val waIdFromMsg = obj.optString("wa_id")
+                        val currentWaId = intent.getStringExtra("wa_id_or_sender") ?: ""
+                        if (waIdFromMsg == currentWaId) sender = "you"
+                    }
+
+                    var imageUrl = obj.optString("url").takeIf { it.isNotBlank() && it != "null" }
+                        ?: obj.optString("file_url")
+
+                    var caption: String? = null
+                    if (!extraInfoStr.isNullOrBlank()) {
+                        try { caption = JSONObject(extraInfoStr).optString("caption", null) } catch (_: Exception) {}
+                    }
+                    if (caption.isNullOrBlank() && messageType == "document") {
+                        caption = obj.optString("filename", null)
+                    }
+                    if (caption.isNullOrBlank() && messageType in listOf("image","video","document")) {
+                        caption = messageBody
+                    }
+
+                    if (messageType == "image" && imageUrl.isNullOrBlank()) {
+                        try {
+                            val extra = JSONObject(extraInfoStr)
+                            val mediaId = extra.optString("media_id")
+                            if (!mediaId.isNullOrBlank()) imageUrl = prefs.getString(mediaId, null)
+                        } catch (_: Exception) {}
+                    }
+                    if (messageType == "template" && imageUrl.isNullOrBlank()) {
+                        imageUrl = resolveTemplateImageFromPrefs(prefs, extraInfoStr)
+                    }
+
+                    val ts = obj.optLong("timestamp", System.currentTimeMillis()/1000)
+
+                    if ((messageBody.isEmpty() || messageBody == "null") &&
+                        messageType !in listOf("image","video","document")) {
+                        continue
+                    }
+
+                    val extraInfoJson = try { JSONObject(extraInfoStr) } catch (_: Exception) { JSONObject() }
+                    if (!extraInfoJson.has("buttons")) {
+                        val tname = extraInfoJson.optString("name")
+                        templateButtonsMap[tname]?.let { stored ->
+                            val ui = JSONArray()
+                            for (k in 0 until stored.length()) {
+                                val b = stored.getJSONObject(k)
+                                ui.put(JSONObject().apply {
+                                    put("index", k)
+                                    put("text", b.optString("text","Action"))
+                                    put("type", b.optString("type"))
+                                    put("param", b.optString("param"))
+                                })
+                            }
+                            extraInfoJson.put("buttons", ui)
+                        }
+                    }
+                    val componentDataJson: String? = try {
+                        val tname = extraInfoJson.optString("name")
+                        templateFullMap[tname]?.optString("component_data")
+                    } catch (_: Exception) { null }
+
+                    items.add(
+                        Message(
+                            sender = sender.takeUnless { it.isNullOrEmpty() },
+                            messageBody = messageBody,
+                            messageType = messageType,
+                            timestamp = ts,
+                            url = imageUrl,
+                            recipientId = obj.optString("recipient_id"),
+                            waId = obj.optString("wa_id"),
+                            sent = obj.optInt("sent", 0),
+                            delivered = obj.optInt("delivered", 0),
+                            read = obj.optInt("read", 0),
+                            caption = caption,
+                            extraInfo = extraInfoJson.toString(),
+                            componentData = componentDataJson
+                        )
+                    )
+                }
+
+                onResult(items, false)
+            },
+            { err -> onError(err) }
+        )
+
+        Volley.newRequestQueue(this).add(req)
+    }
+    private var bulkPrefetchInProgress = false
+
+    fun prefetchAllHistoryFast(onDone: (() -> Unit)? = null) {
+        if (allMessagesLoaded || bulkPrefetchInProgress) { onDone?.invoke(); return }
+        bulkPrefetchInProgress = true
+
+        // Don’t auto-scroll or rebind while fetching
+        val prevSuppress = suppressAutoScroll
+        suppressAutoScroll = true
+
+        // Keep current page pointer; your API uses higher page => older
+        var page = currentPage + 1
+
+        fun step() {
+            fetchPage(page,
+                onResult = { items, isLast ->
+                    if (isLast || items.isEmpty()) {
+                        // We’re done: sort, render once, restore flags
+                        allMessages.sortBy { it.timestamp }
+                        adapter.setMessages(allMessages)
+                        suppressAutoScroll = prevSuppress
+                        bulkPrefetchInProgress = false
+                        allMessagesLoaded = true
+                        onDone?.invoke()
+                        return@fetchPage
+                    }
+
+                    // Only touch the in-memory cache here
+                    allMessages.addAll(0, items) // prepend older ones
+                    // For speed, avoid sorting every page; sort occasionally:
+                    if (page % 5 == 0) allMessages.sortBy { it.timestamp }
+
+                    page += 1
+                    step()
+                },
+                onError = {
+                    // fail gracefully: render whatever we have
+                    allMessages.sortBy { it.timestamp }
+                    adapter.setMessages(allMessages)
+                    suppressAutoScroll = prevSuppress
+                    bulkPrefetchInProgress = false
+                    onDone?.invoke()
+                }
+            )
+        }
+
+        step()
     }
 
 

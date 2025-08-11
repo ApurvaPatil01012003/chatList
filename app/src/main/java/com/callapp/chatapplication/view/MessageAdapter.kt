@@ -172,6 +172,7 @@ class MessageAdapter(
         if (!message.caption.isNullOrEmpty() && message.caption != "null") {
             holder.captionTextView?.text = message.caption
             holder.captionTextView?.visibility = View.VISIBLE
+            holder.captionTextView?.text = formatMessageText(message.caption ?: "")
             Log.d("ADAPTER_CAPTION", "Showing caption: ${message.caption}")
         } else {
             holder.captionTextView?.visibility = View.GONE
@@ -241,6 +242,7 @@ class MessageAdapter(
         if (!message.caption.isNullOrEmpty() && message.caption != "null") {
             holder.captionTextView?.text = message.caption
             holder.captionTextView?.visibility = View.VISIBLE
+            holder.captionTextView?.text = formatMessageText(message.caption ?: "")
             Log.d("ADAPTER_CAPTION", " caption shown: ${message.caption}")
         } else {
             holder.captionTextView?.visibility = View.GONE
@@ -297,6 +299,7 @@ class MessageAdapter(
         if (!message.caption.isNullOrEmpty() && message.caption != "null") {
             holder.captionTextView?.text = message.caption
             holder.captionTextView?.visibility = View.VISIBLE
+            holder.captionTextView?.text = formatMessageText(message.caption ?: "")
             Log.d("ADAPTER_CAPTION", "Document caption shown: ${message.caption}")
         } else {
             holder.captionTextView?.visibility = View.GONE
@@ -654,19 +657,25 @@ class MessageAdapter(
 
     private var highlightedPositions = mutableListOf<Int>()
 
+
+
     fun setSearchQuery(query: String) {
         searchQuery = query
         highlightedPositions.clear()
+        if (query.isBlank()) { notifyDataSetChanged(); return }
 
-        messages.forEachIndexed { index, message ->
-            val text = message.messageBody ?: ""
-            if (text.contains(query, ignoreCase = true)) {
-                highlightedPositions.add(index)
-            }
+        val q = query.lowercase(Locale.getDefault())
+        messages.forEachIndexed { index, m ->
+            val body = m.messageBody.orEmpty()
+            val cap  = m.caption.orEmpty()
+            val file = if (m.messageType == "document") (m.url?.substringAfterLast('/') ?: "") else ""
+            val haystack = listOf(body, cap, file).filter { it.isNotBlank() }
+                .joinToString("\n").lowercase(Locale.getDefault())
+            if (haystack.contains(q)) highlightedPositions.add(index)
         }
-
         notifyDataSetChanged()
     }
+
 
     fun getHighlightedPositions(): List<Int> = highlightedPositions
 
@@ -678,6 +687,7 @@ class MessageAdapter(
         highlightedPositions.clear()
         notifyDataSetChanged()
     }
+
 
 
 

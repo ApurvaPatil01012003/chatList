@@ -82,6 +82,8 @@
                     android:inputType="text"
                     android:textColor="@color/black"
                     android:textSize="16sp" />
+
+
                 <ImageView
                     android:id="@+id/btnNext"
                     android:layout_width="wrap_content"
