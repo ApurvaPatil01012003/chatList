@@ -15,8 +15,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="16 Jul 2025, 11:15 AM"
-        android:textSize="12sp"
+        android:textSize="@dimen/_12ssp"
         android:textColor="#888888"
-        android:layout_marginTop="4dp" />
+        android:layout_marginTop="@dimen/_4sdp" />
 
 </LinearLayout>

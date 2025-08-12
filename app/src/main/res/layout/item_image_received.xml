@@ -1,7 +1,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="8dp"
+    android:padding="@dimen/_8sdp"
     android:gravity="start"
     android:orientation="vertical">
 
@@ -11,14 +11,14 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:background="@drawable/chat_bg_recived"
-        android:padding="10dp"
-        android:layout_marginTop="10dp"
-        android:maxWidth="280dp">
+        android:padding="@dimen/_10sdp"
+        android:layout_marginTop="@dimen/_10sdp"
+        android:maxWidth="@dimen/_280sdp">
 
     <ImageView
         android:id="@+id/imageMessage"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
+        android:layout_width="@dimen/_200sdp"
+        android:layout_height="@dimen/_200sdp"
         android:scaleType="centerCrop"
         />
         <TextView
@@ -26,31 +26,31 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#000000"
-            android:textSize="14sp"
-            android:layout_marginTop="4dp"
+            android:textSize="@dimen/_14ssp"
+            android:layout_marginTop="@dimen/_4sdp"
             android:visibility="gone" />
     <TextView
         android:id="@+id/timestampText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="#888888"
-        android:textSize="12sp"
+        android:textSize="@dimen/_12ssp"
         android:layout_gravity="end"
-        android:layout_marginTop="4dp" />
+        android:layout_marginTop="@dimen/_4sdp" />
         <TextView
             android:id="@+id/failedLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Failed"
             android:textColor="@android:color/holo_red_dark"
-            android:textSize="10sp"
-            android:layout_marginStart="4dp"
+            android:textSize="@dimen/_10ssp"
+            android:layout_marginStart="@dimen/_4sdp"
             android:visibility="gone" />
     <LinearLayout
         android:id="@+id/buttonContainer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginTop="8dp"/>
+        android:layout_marginTop="@dimen/_8sdp"/>
     </LinearLayout>
 </LinearLayout>

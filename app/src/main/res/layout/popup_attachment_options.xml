@@ -5,19 +5,19 @@
     android:layout_height="wrap_content"
     android:background="@drawable/popup_background"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="@dimen/_8sdp">
 
     <LinearLayout
         android:id="@+id/optionImage"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp"
+        android:padding="@dimen/_8sdp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
             android:src="@drawable/baseline_image_24"
             app:tint="#4285F4" />
 
@@ -25,7 +25,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Image"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="@dimen/_12sdp"
             android:textColor="#000" />
     </LinearLayout>
 
@@ -33,13 +33,13 @@
         android:id="@+id/optionVideo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp"
+        android:padding="@dimen/_8sdp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
             android:src="@drawable/baseline_video_library_24"
             app:tint="#EA4335" />
 
@@ -47,7 +47,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Video"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="@dimen/_12sdp"
             android:textColor="#000" />
     </LinearLayout>
 
@@ -55,13 +55,13 @@
         android:id="@+id/optionDocument"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp"
+        android:padding="@dimen/_8sdp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="@dimen/_24sdp"
+            android:layout_height="@dimen/_24sdp"
             android:src="@drawable/baseline_insert_drive_file_24"
             app:tint="#34A853" />
 
@@ -69,7 +69,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Document"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="@dimen/_12sdp"
             android:textColor="#000" />
     </LinearLayout>
 </LinearLayout>

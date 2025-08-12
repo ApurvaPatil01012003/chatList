@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:gravity="start"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="@dimen/_8sdp">
 
 
 
@@ -14,15 +14,15 @@
         android:orientation="vertical"
         android:background="@drawable/chat_bg_recived"
         android:layout_marginEnd="30dp"
-        android:padding="10dp"
-        android:maxWidth="280dp">
+        android:padding="@dimen/_10sdp"
+        android:maxWidth="@dimen/_280sdp">
 
         <TextView
             android:id="@+id/textMessage"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#000000"
-            android:textSize="15sp"
+            android:textSize="@dimen/_15ssp"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -30,15 +30,14 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_gravity="end"
-            android:layout_marginTop="6dp">
+            android:layout_marginTop="@dimen/_6sdp">
 
             <TextView
                 android:id="@+id/timestampText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="#666666"
-                android:textSize="10sp" />
-
+                android:textSize="@dimen/_10ssp" />
         </LinearLayout>
     </LinearLayout>
     <LinearLayout
@@ -46,7 +45,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginTop="8dp"/>
+        android:layout_marginTop="@dimen/_8sdp"/>
 
     <TextView
         android:id="@+id/failedLabel"
@@ -54,8 +53,8 @@
         android:layout_height="wrap_content"
         android:text="Send Failed"
         android:textColor="@android:color/holo_red_dark"
-        android:textSize="12sp"
-        android:layout_marginTop="2dp"
+        android:textSize="@dimen/_12ssp"
+        android:layout_marginTop="@dimen/_2sdp"
      />
 
 </LinearLayout>

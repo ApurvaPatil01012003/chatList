@@ -24,7 +24,7 @@
 
     <View
         android:layout_width="match_parent"
-        android:layout_height="2dp"
+        android:layout_height="@dimen/_2sdp"
         android:background="#DADADA" />
 
     <FrameLayout
@@ -44,11 +44,11 @@
 
         <View
             android:id="@+id/activeDot"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
+            android:layout_width="@dimen/_12sdp"
+            android:layout_height="@dimen/_12sdp"
             android:layout_gravity="bottom|end"
-            android:layout_marginEnd="2dp"
-            android:layout_marginBottom="2dp"
+            android:layout_marginEnd="@dimen/_2sdp"
+            android:layout_marginBottom="@dimen/_2sdp"
             android:background="@drawable/green_dot" />
     </FrameLayout>
 

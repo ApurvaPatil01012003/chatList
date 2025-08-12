@@ -43,7 +43,7 @@
                     android:textStyle="bold"
                     android:textColor="@color/black"
                     android:background="@drawable/bg_tag_initials"
-                    android:layout_marginEnd="6dp" />
+                    android:layout_marginEnd="@dimen/_6sdp" />
 
                 <TextView
                     android:id="@+id/txtTag"
@@ -63,7 +63,7 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:visibility="gone"
-                android:paddingHorizontal="8dp">
+                android:paddingHorizontal="@dimen/_8sdp">
 
                 <ImageButton
                     android:id="@+id/btnSearchBack"
@@ -81,7 +81,7 @@
                     android:background="@null"
                     android:inputType="text"
                     android:textColor="@color/black"
-                    android:textSize="16sp" />
+                    android:textSize="@dimen/_16ssp" />
 
 
                 <ImageView
@@ -89,14 +89,14 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:src="@drawable/baseline_keyboard_arrow_up_24"
-                    android:padding="10dp"
+                    android:padding="@dimen/_10sdp"
                   />
                 <ImageView
                     android:id="@+id/btnPrev"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:src="@drawable/baseline_keyboard_arrow_down_24"
-                    android:padding="10dp"/>
+                    android:padding="@dimen/_10sdp"/>
             </LinearLayout>
 
         </androidx.appcompat.widget.Toolbar>
@@ -158,12 +158,12 @@
                 android:layout_weight="1"
                 android:hint="Type a message..."
                 android:background="@drawable/bg_message_input"
-                android:paddingHorizontal="12dp"
-                android:paddingVertical="8dp"
+                android:paddingHorizontal="@dimen/_12sdp"
+                android:paddingVertical="@dimen/_8sdp"
                 android:maxLines="4"
                 android:minLines="1"
                 android:textColor="@color/black"
-                android:textSize="14sp" />
+                android:textSize="@dimen/_14ssp" />
 
             <ImageButton
                 android:id="@+id/buttonSend"

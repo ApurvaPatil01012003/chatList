@@ -1,5 +1,13 @@
 package com.callapp.chatapplication.controller
 
+import android.util.Base64
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.*
+
 import android.app.Dialog
 import android.content.Context
 import android.content.Intent
@@ -59,6 +67,7 @@ import com.callapp.chatapplication.databinding.ActivityDisplayChatBinding
 import com.callapp.chatapplication.model.Message
 import com.callapp.chatapplication.view.MessageAdapter
 import com.google.android.material.textfield.TextInputLayout
+import com.google.gson.Gson
 import org.json.JSONArray
 import org.json.JSONObject
 import com.google.i18n.phonenumbers.PhoneNumberUtil
@@ -68,6 +77,11 @@ import java.util.Date
 import java.util.Locale
 
 class Display_chat : AppCompatActivity() {
+    companion object {
+        private const val CHAT_CACHE_PREF = "local_chat_cache"
+        private const val CHUNK_BYTES = 300 * 1024
+    }
+
     private lateinit var binding: ActivityDisplayChatBinding
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MessageAdapter
@@ -81,14 +95,14 @@ class Display_chat : AppCompatActivity() {
     private var name: String? = null
     private var number: String? = null
     private var userName: String? = null
-    private var fMsgDate: String?=null
-    private var lMsgDate :String?=null
-    private var flagEmoji: String?=null
+    private var fMsgDate: String? = null
+    private var lMsgDate: String? = null
+    private var flagEmoji: String? = null
     private var currentPage = 1
     private var isLoading = false
     private var allMessagesLoaded = false
     private val allMessages = mutableListOf<Message>()
-    private var accessToken :String? =null
+    private var accessToken: String? = null
 
     private lateinit var layoutSearch: LinearLayout
     private lateinit var layoutTitleNormal: LinearLayout
@@ -102,6 +116,11 @@ class Display_chat : AppCompatActivity() {
     private var suppressAutoScroll = false
     private var isSearchPaging = false
     private val templateLanguageMap = mutableMapOf<String, String>()
+
+
+    private fun cacheKeyPrefix(waId: String) = "chat_${waId}_"
+    private fun keyMeta(prefix: String) = "${prefix}meta"
+    private fun keyChunk(prefix: String, i: Int) = "${prefix}chunk_$i"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,16 +136,16 @@ class Display_chat : AppCompatActivity() {
         }
         isActiveLast24Hours = intent.getBooleanExtra("active_last_24_hours", true)
 
-        accessToken=intent.getStringExtra("Token")
+        accessToken = intent.getStringExtra("Token")
         name = intent.getStringExtra("contact_name")
         number = intent.getStringExtra("wa_id_or_sender")
         waId = intent.getStringExtra("wa_id_or_sender") ?: ""
         phoneNumberId = intent.getStringExtra("phoneNumberId") ?: ""
         userName = intent.getStringExtra("user_name") ?: ""
-        fMsgDate=intent.getStringExtra("first_message_date")?:""
-        lMsgDate =intent.getStringExtra("last_message_date")?:""
+        fMsgDate = intent.getStringExtra("first_message_date") ?: ""
+        lMsgDate = intent.getStringExtra("last_message_date") ?: ""
 
-        loadMessages(page = 1)
+
         if (!userName.isNullOrBlank() && userName != "null") {
             val initial = userName!!.trim().firstOrNull()?.uppercaseChar() ?: 'N'
             binding.txtTagInitial.text = initial.toString()
@@ -134,6 +153,8 @@ class Display_chat : AppCompatActivity() {
         } else {
             binding.txtTagInitial.visibility = View.GONE
         }
+
+
         layoutTitleNormal = findViewById(R.id.layoutTitleNormal)
 
         layoutSearch = findViewById(R.id.layoutSearch)
@@ -201,6 +222,8 @@ class Display_chat : AppCompatActivity() {
         binding.recyclerViewMessages.layoutManager = LinearLayoutManager(this)
         binding.recyclerViewMessages.adapter = adapter
 
+        restoreMessagesFromCache()
+        loadMessages(page = 1, appendToTop = false, force = true)
 
 
         binding.buttonSend.setOnClickListener {
@@ -224,8 +247,11 @@ class Display_chat : AppCompatActivity() {
                 )
 
                 adapter.addMessage(msg)
+                allMessages.add(msg)
+                saveMessagesLocally(allMessages)
                 binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
                 binding.editTextMessage.setText("")
+
 
 
                 sendTextMessage(
@@ -276,7 +302,7 @@ class Display_chat : AppCompatActivity() {
         btnSearchBack.setOnClickListener {
             hideSearchBar()
         }
-        // Replace your afterTextChanged with this
+
         editSearch.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 val q = s?.toString()?.trim().orEmpty()
@@ -288,37 +314,57 @@ class Display_chat : AppCompatActivity() {
                 if (q.isEmpty()) return
 
                 if (matchPositions.isNotEmpty()) {
-                    // newest match in what we already have
                     scrollToMatch(matchPositions.size - 1)
                 } else {
-                    // nothing loaded yet → go fetch older pages until we find one
                     findOlderPagesUntilMatch(q)
                 }
             }
+
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
         binding.btnNext.setOnClickListener {
-            if (matchPositions.isEmpty()) return@setOnClickListener
+            val q = editSearch.text.toString().trim()
+            if (q.isEmpty()) return@setOnClickListener
+            if (matchPositions.isEmpty()) {
+                // nothing highlighted yet → ensure we’re searching the full dataset
+                if (!allMessagesLoaded && !isLoading) {
+                    prefetchAllHistoryFast {
+                        adapter.setSearchQuery(q)
+                        matchPositions = adapter.getHighlightedPositions().toMutableList()
+                        matchPtr = -1
+                        if (matchPositions.isNotEmpty()) scrollToMatch(matchPositions.size - 1)
+                        else Toast.makeText(this, "No matches found", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "No matches found", Toast.LENGTH_SHORT).show()
+                }
+                return@setOnClickListener
+            }
 
             if (matchPtr > 0) {
                 scrollToMatch(matchPtr - 1)
-            } else {
-                val q = editSearch.text.toString().trim()
-                if (q.isNotEmpty() && !allMessagesLoaded && !isLoading) {
-                    currentPage += 1
-                    loadMessages(page = currentPage, appendToTop = true) {
-                        adapter.setSearchQuery(q)
-                        matchPositions = adapter.getHighlightedPositions().toMutableList()
-                        if (matchPositions.isNotEmpty()) {
-                            scrollToMatch(0)
-                        }
+                return@setOnClickListener
+            }
+
+            if (!allMessagesLoaded && !isLoading) {
+                suppressAutoScroll = true
+                prefetchAllHistoryFast {
+                    suppressAutoScroll = false
+                    adapter.setSearchQuery(q)
+                    matchPositions = adapter.getHighlightedPositions().toMutableList()
+                    matchPtr = -1
+                    if (matchPositions.isNotEmpty()) {
+                        scrollToMatch(0)
+                    } else {
+                        Toast.makeText(this, "No matches found", Toast.LENGTH_SHORT).show()
                     }
-                } else {
-                    Toast.makeText(this, "Reached oldest match", Toast.LENGTH_SHORT).show()
                 }
+            } else {
+                Toast.makeText(this, "Reached oldest match", Toast.LENGTH_SHORT).show()
             }
         }
+
 
         binding.btnPrev.setOnClickListener {
             if (matchPositions.isEmpty()) return@setOnClickListener
@@ -329,7 +375,9 @@ class Display_chat : AppCompatActivity() {
             }
         }
 
+
     }
+
     fun sendTextMessage(
         to: String,
         text: String,
@@ -378,7 +426,6 @@ class Display_chat : AppCompatActivity() {
 
     fun fetchTemplates(onResult: (List<JSONObject>) -> Unit, onError: (String) -> Unit) {
         val url =
-            // "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=Vpv6mesdUaY3XHS6BKrM0XOdIoQu4ygTVaHmpKMNb29bc1c7"
             "https://waba.mpocket.in/api/phone/get/message_templates/$phoneNumberId?accessToken=$accessToken"
 
         val request = JsonObjectRequest(Request.Method.GET, url, null,
@@ -395,8 +442,6 @@ class Display_chat : AppCompatActivity() {
                     val template = templates?.getJSONObject(i) ?: continue
                     val name = template.optString("name")
                     val componentsStr = template.optString("components")
-
-                    // Store this when fetching templates
                     val langCode = template.optString("language").ifBlank { "en_US" }
                     templateLanguageMap[name] = langCode
 
@@ -451,7 +496,7 @@ class Display_chat : AppCompatActivity() {
 
 
                 onResult(result)
-                loadMessages() // optional
+                loadMessages()
 
 
             },
@@ -589,7 +634,7 @@ class Display_chat : AppCompatActivity() {
                             return
                         }
 
-                        headerImageUrl = imageUrl // save for display
+                        headerImageUrl = imageUrl
 
                         val headerParams = JSONArray().apply {
                             put(JSONObject().apply {
@@ -630,7 +675,6 @@ class Display_chat : AppCompatActivity() {
                         val subType = if (type == "PHONE_NUMBER") "VOICE_CALL" else type
                         val param = btn.optString("param")
 
-                        // API payload
                         val buttonObj = JSONObject().apply {
                             put("type", "button")
                             put("sub_type", subType)
@@ -647,7 +691,6 @@ class Display_chat : AppCompatActivity() {
                         }
                         componentsArray.put(buttonObj)
 
-                        // Display in chat
                         buttonsUIArray.put(JSONObject().apply {
                             put("index", k)
                             put("text", btn.optString("text", "Action"))
@@ -695,7 +738,6 @@ class Display_chat : AppCompatActivity() {
                 }
 
                 val renderedText = renderBody(templateBodyMap[name], bodyInputs)
-                // val renderedButtons = template.optJSONArray("rendered_buttons") ?: JSONArray()
                 val renderedButtons = buttonsUIArray
 
                 val extraInfoJson = JSONObject().apply {
@@ -720,6 +762,8 @@ class Display_chat : AppCompatActivity() {
                 )
 
                 adapter.addMessage(message)
+                allMessages.add(message)
+                saveMessagesLocally(allMessages)
                 binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
             },
             { error ->
@@ -1015,11 +1059,17 @@ class Display_chat : AppCompatActivity() {
         card.addView(scrollView)
         layout.addView(card)
     }
-    fun loadMessages(page: Int = 1, appendToTop: Boolean = false, onFinish: (() -> Unit)? = null) {
+
+    fun loadMessages(
+        page: Int = 1,
+        appendToTop: Boolean = false,
+        onFinish: (() -> Unit)? = null,
+        force: Boolean = false
+    ) {
         val number = intent.getStringExtra("wa_id_or_sender") ?: return
         val url = "https://waba.mpocket.in/api/phone/get/$phoneNumberId/$number/$page"
 
-        if (isLoading || allMessagesLoaded) return
+        if (isLoading || (allMessagesLoaded && !force)) return
         isLoading = true
 
         val request = JsonArrayRequest(Request.Method.GET, url, null,
@@ -1047,27 +1097,67 @@ class Display_chat : AppCompatActivity() {
                     val messageType = obj.optString("message_type") ?: "text"
                     val extraInfoStr = obj.optString("extra_info")
 
+//                    val messageBody = when (messageType) {
+//                        "template" -> {
+//                            try {
+//                                val extraInfo = JSONObject(extraInfoStr)
+//                                val name = extraInfo.optString("name")
+//                                val components = extraInfo.optJSONArray("components")
+//                                val body = (0 until (components?.length() ?: 0))
+//                                    .mapNotNull { components?.optJSONObject(it) }
+//                                    .firstOrNull { it.optString("type") == "body" }
+//
+//                                val params = body?.optJSONArray("parameters")
+//                                val values = (0 until (params?.length()
+//                                    ?: 0)).map { i -> params!!.getJSONObject(i).optString("text") }
+//                                val templateText = templateBodyMap[name] ?: name
+//                                values.foldIndexed(templateText) { index, acc, v ->
+//                                    acc.replace(
+//                                        "{{${index + 1}}}",
+//                                        v
+//                                    )
+//                                }
+//                            } catch (e: Exception) {
+//                                Log.e("TEMPLATE_PARSE", "Error parsing template body", e)
+//                                "Template Message"
+//                            }
+//                        }
+//
+//                        else -> obj.optString("message_body", "")
+//                    }
+
+
                     val messageBody = when (messageType) {
                         "template" -> {
                             try {
                                 val extraInfo = JSONObject(extraInfoStr)
                                 val name = extraInfo.optString("name")
-                                val components = extraInfo.optJSONArray("components")
-                                val body = (0 until (components?.length() ?: 0))
-                                    .mapNotNull { components?.optJSONObject(it) }
+                                val comps = extraInfo.optJSONArray("components")
+                                val body = (0 until (comps?.length() ?: 0))
+                                    .mapNotNull { comps?.optJSONObject(it) }
                                     .firstOrNull { it.optString("type") == "body" }
 
                                 val params = body?.optJSONArray("parameters")
-                                val values = (0 until (params?.length() ?: 0)).map { i -> params!!.getJSONObject(i).optString("text") }
-                                val templateText = templateBodyMap[name] ?: name
-                                values.foldIndexed(templateText) { index, acc, v -> acc.replace("{{${index + 1}}}", v) }
-                            } catch (e: Exception) {
-                                Log.e("TEMPLATE_PARSE", "Error parsing template body", e)
-                                "Template Message"
+                                val values = (0 until (params?.length() ?: 0)).map { idx ->
+                                    params!!.getJSONObject(idx).optString("text")
+                                }
+
+                                val base = templateBodyFor(name)      // ← no more “?: name”
+                                if (base.isBlank()) "" else values.foldIndexed(base) { idx, acc, v ->
+                                    acc.replace("{{${idx + 1}}}", v)
+                                }
+                            } catch (_: Exception) {
+                                ""
                             }
                         }
                         else -> obj.optString("message_body", "")
                     }
+
+// Skip empty non-media messages (prevents placeholder bubble)
+                    if ((messageBody.isEmpty() || messageBody == "null") &&
+                        messageType !in listOf("image", "video", "document")
+                    ) continue
+
 
                     var sender = obj.optString("sender") ?: ""
                     if (sender.isEmpty()) {
@@ -1076,19 +1166,26 @@ class Display_chat : AppCompatActivity() {
                         if (waIdFromMsg == currentUserWaId) sender = "you"
                     }
 
-                    var imageUrl = obj.optString("url").takeIf { it.isNotBlank() && it != "null" } ?: obj.optString("file_url")
+                    var imageUrl = obj.optString("url").takeIf { it.isNotBlank() && it != "null" }
+                        ?: obj.optString("file_url")
 
                     var caption: String? = null
                     if (!extraInfoStr.isNullOrBlank()) {
                         try {
                             val extra = JSONObject(extraInfoStr)
                             caption = extra.optString("caption", null)
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
                     if (caption.isNullOrBlank() && messageType == "document") {
                         caption = obj.optString("filename", null)
                     }
-                    if (caption.isNullOrBlank() && messageType in listOf("image", "video", "document")) {
+                    if (caption.isNullOrBlank() && messageType in listOf(
+                            "image",
+                            "video",
+                            "document"
+                        )
+                    ) {
                         caption = messageBody
                     }
 
@@ -1099,7 +1196,8 @@ class Display_chat : AppCompatActivity() {
                             if (!mediaId.isNullOrBlank()) {
                                 imageUrl = prefs.getString(mediaId, null)
                             }
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
 
                     if (messageType == "template" && (imageUrl.isNullOrBlank() || imageUrl == "null")) {
@@ -1108,11 +1206,20 @@ class Display_chat : AppCompatActivity() {
 
                     val timestamp = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
 
-                    if ((messageBody.isEmpty() || messageBody == "null") && messageType !in listOf("image", "video", "document")) {
+                    if ((messageBody.isEmpty() || messageBody == "null") && messageType !in listOf(
+                            "image",
+                            "video",
+                            "document"
+                        )
+                    ) {
                         continue
                     }
 
-                    val extraInfoJson = try { JSONObject(extraInfoStr) } catch (_: Exception) { JSONObject() }
+                    val extraInfoJson = try {
+                        JSONObject(extraInfoStr)
+                    } catch (_: Exception) {
+                        JSONObject()
+                    }
                     if (!extraInfoJson.has("buttons")) {
                         val name = extraInfoJson.optString("name")
                         val storedButtons = templateButtonsMap[name]
@@ -1135,7 +1242,9 @@ class Display_chat : AppCompatActivity() {
                     val componentDataJson: String? = try {
                         val name = extraInfoJson.optString("name")
                         templateFullMap[name]?.optString("component_data")
-                    } catch (_: Exception) { null }
+                    } catch (_: Exception) {
+                        null
+                    }
 
 
                     newMessages.add(
@@ -1167,21 +1276,37 @@ class Display_chat : AppCompatActivity() {
                     allMessages.addAll(0, newMessages)
                     allMessages.sortBy { it.timestamp }
                     adapter.setMessages(allMessages)
+                    saveMessagesLocally(allMessages)
+
 
                     if (!suppressAutoScroll) {
                         binding.recyclerViewMessages.scrollToPosition(newMessages.size)
                     }
                 } else {
-                    allMessages.clear()
-                    allMessages.addAll(newMessages)
-                    allMessages.sortBy { it.timestamp }
-                    adapter.setMessages(allMessages)
+//                    allMessages.clear()
+//                    allMessages.addAll(newMessages)
+//                    allMessages.sortBy { it.timestamp }
+//                    adapter.setMessages(allMessages)
+//                    saveMessagesLocally(allMessages)
+//
+//
+//                    if (!suppressAutoScroll) {
+//                        binding.recyclerViewMessages.scrollToPosition(allMessages.size - 1)
+//                    }
 
+                    if (allMessages.isNotEmpty()) {
+                        mergeNewestPage(newMessages)  // NEW
+                    } else {
+                        allMessages.clear()
+                        allMessages.addAll(newMessages)
+                        allMessages.sortBy { it.timestamp }
+                        adapter.setMessages(allMessages)
+                        saveMessagesLocally(allMessages)
+                    }
                     if (!suppressAutoScroll) {
                         binding.recyclerViewMessages.scrollToPosition(allMessages.size - 1)
                     }
                 }
-
 
 
 // ...later, when handling search matches for this page:
@@ -1207,8 +1332,6 @@ class Display_chat : AppCompatActivity() {
 
         Volley.newRequestQueue(this).add(request)
     }
-
-
 
 
     fun resolveTemplateImageFromPrefs(prefs: SharedPreferences, extraInfoStr: String?): String? {
@@ -1453,6 +1576,8 @@ class Display_chat : AppCompatActivity() {
 
 
                 adapter.addMessage(sentMessage)
+                allMessages.add(sentMessage)      // ← add it
+                saveMessagesLocally(allMessages)
 
                 binding.recyclerViewMessages.scrollToPosition(adapter.itemCount - 1)
 
@@ -1680,7 +1805,6 @@ class Display_chat : AppCompatActivity() {
     }
 
 
-
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.viewProfile -> {
@@ -1688,15 +1812,16 @@ class Display_chat : AppCompatActivity() {
                 profileIntent.putExtra("ContactName", name ?: "Unknown")
                 profileIntent.putExtra("ContactNumber", number ?: "Unknown")
                 profileIntent.putExtra("User_Name", userName)
-                profileIntent.putExtra("first_message_date",fMsgDate)
-                profileIntent.putExtra("last_message_date",lMsgDate)
-                profileIntent.putExtra("Active",isActiveLast24Hours)
-                profileIntent.putExtra("Flag",flagEmoji)
+                profileIntent.putExtra("first_message_date", fMsgDate)
+                profileIntent.putExtra("last_message_date", lMsgDate)
+                profileIntent.putExtra("Active", isActiveLast24Hours)
+                profileIntent.putExtra("Flag", flagEmoji)
                 startActivity(profileIntent)
                 true
 
 
             }
+
             R.id.action_search -> {
                 showSearchBar()
                 true
@@ -1706,13 +1831,6 @@ class Display_chat : AppCompatActivity() {
         }
     }
 
-//    private fun showSearchBar() {
-//        layoutTitleNormal.visibility = View.GONE
-//        layoutSearch.visibility = View.VISIBLE
-//        editSearch.requestFocus()
-//        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-//        btnSearch.isVisible = false
-//    }
 
     private fun showSearchBar() {
         layoutTitleNormal.visibility = View.GONE
@@ -1721,9 +1839,10 @@ class Display_chat : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         btnSearch.isVisible = false
 
-        // fire and forget; no UI jumps
+
         if (!allMessagesLoaded) {
-            Toast.makeText(this, "Fetching older messages in background…", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Fetching older messages in background…", Toast.LENGTH_SHORT)
+                .show()
             prefetchAllHistoryFast()
         }
     }
@@ -1734,10 +1853,8 @@ class Display_chat : AppCompatActivity() {
         layoutTitleNormal.visibility = View.VISIBLE
         editSearch.setText("")
         adapter.clearHighlights()
-        supportActionBar?.setDisplayHomeAsUpEnabled(false)
         btnSearch.isVisible = true
     }
-
 
 
     private fun scrollToMatch(pointer: Int) {
@@ -1751,33 +1868,40 @@ class Display_chat : AppCompatActivity() {
 
 
     private fun findOlderPagesUntilMatch(query: String) {
-        if (isSearchPaging || allMessagesLoaded) return
-        isSearchPaging = true
-
-        fun step() {
-            if (allMessagesLoaded) {
-                isSearchPaging = false
+        // If we already have the whole history cached, no need to page.
+        if (allMessagesLoaded) {
+            adapter.setSearchQuery(query)
+            matchPositions = adapter.getHighlightedPositions().toMutableList()
+            matchPtr = -1
+            if (matchPositions.isNotEmpty()) {
+                scrollToMatch(matchPositions.size - 1) // jump to newest match
+            } else {
                 Toast.makeText(this, "No matches found", Toast.LENGTH_SHORT).show()
-                return
             }
-
-            currentPage += 1
-            loadMessages(page = currentPage, appendToTop = true) {
-                adapter.setSearchQuery(query)
-                matchPositions = adapter.getHighlightedPositions().toMutableList()
-
-                if (matchPositions.isNotEmpty()) {
-                    scrollToMatch(0)
-                    isSearchPaging = false
-                } else {
-
-                    step()
-                }
-            }
+            return
         }
 
-        step()
+        if (isSearchPaging) return
+        isSearchPaging = true
+        suppressAutoScroll = true  // avoid jumpiness while fetching
+
+        // Fire a fast background prefetch of all older pages once.
+        prefetchAllHistoryFast {
+            // Prefetch done (either success or best-effort). Now search again.
+            adapter.setSearchQuery(query)
+            matchPositions = adapter.getHighlightedPositions().toMutableList()
+            matchPtr = -1
+            suppressAutoScroll = false
+            isSearchPaging = false
+
+            if (matchPositions.isNotEmpty()) {
+                scrollToMatch(matchPositions.size - 1)
+            } else {
+                Toast.makeText(this, "No matches found", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
+
     private fun fetchPage(
         page: Int,
         onResult: (items: List<Message>, isLastPage: Boolean) -> Unit,
@@ -1816,7 +1940,9 @@ class Display_chat : AppCompatActivity() {
                             values.foldIndexed(templateText) { idx, acc, v ->
                                 acc.replace("{{${idx + 1}}}", v)
                             }
-                        } catch (_: Exception) { "Template Message" }
+                        } catch (_: Exception) {
+                            "Template Message"
+                        }
                     } else obj.optString("message_body", "")
 
                     var sender = obj.optString("sender")
@@ -1831,12 +1957,20 @@ class Display_chat : AppCompatActivity() {
 
                     var caption: String? = null
                     if (!extraInfoStr.isNullOrBlank()) {
-                        try { caption = JSONObject(extraInfoStr).optString("caption", null) } catch (_: Exception) {}
+                        try {
+                            caption = JSONObject(extraInfoStr).optString("caption", null)
+                        } catch (_: Exception) {
+                        }
                     }
                     if (caption.isNullOrBlank() && messageType == "document") {
                         caption = obj.optString("filename", null)
                     }
-                    if (caption.isNullOrBlank() && messageType in listOf("image","video","document")) {
+                    if (caption.isNullOrBlank() && messageType in listOf(
+                            "image",
+                            "video",
+                            "document"
+                        )
+                    ) {
                         caption = messageBody
                     }
 
@@ -1845,20 +1979,26 @@ class Display_chat : AppCompatActivity() {
                             val extra = JSONObject(extraInfoStr)
                             val mediaId = extra.optString("media_id")
                             if (!mediaId.isNullOrBlank()) imageUrl = prefs.getString(mediaId, null)
-                        } catch (_: Exception) {}
+                        } catch (_: Exception) {
+                        }
                     }
                     if (messageType == "template" && imageUrl.isNullOrBlank()) {
                         imageUrl = resolveTemplateImageFromPrefs(prefs, extraInfoStr)
                     }
 
-                    val ts = obj.optLong("timestamp", System.currentTimeMillis()/1000)
+                    val ts = obj.optLong("timestamp", System.currentTimeMillis() / 1000)
 
                     if ((messageBody.isEmpty() || messageBody == "null") &&
-                        messageType !in listOf("image","video","document")) {
+                        messageType !in listOf("image", "video", "document")
+                    ) {
                         continue
                     }
 
-                    val extraInfoJson = try { JSONObject(extraInfoStr) } catch (_: Exception) { JSONObject() }
+                    val extraInfoJson = try {
+                        JSONObject(extraInfoStr)
+                    } catch (_: Exception) {
+                        JSONObject()
+                    }
                     if (!extraInfoJson.has("buttons")) {
                         val tname = extraInfoJson.optString("name")
                         templateButtonsMap[tname]?.let { stored ->
@@ -1867,7 +2007,7 @@ class Display_chat : AppCompatActivity() {
                                 val b = stored.getJSONObject(k)
                                 ui.put(JSONObject().apply {
                                     put("index", k)
-                                    put("text", b.optString("text","Action"))
+                                    put("text", b.optString("text", "Action"))
                                     put("type", b.optString("type"))
                                     put("param", b.optString("param"))
                                 })
@@ -1878,7 +2018,9 @@ class Display_chat : AppCompatActivity() {
                     val componentDataJson: String? = try {
                         val tname = extraInfoJson.optString("name")
                         templateFullMap[tname]?.optString("component_data")
-                    } catch (_: Exception) { null }
+                    } catch (_: Exception) {
+                        null
+                    }
 
                     items.add(
                         Message(
@@ -1906,53 +2048,186 @@ class Display_chat : AppCompatActivity() {
 
         Volley.newRequestQueue(this).add(req)
     }
+
     private var bulkPrefetchInProgress = false
+    private fun saveMessagesLocally(messages: List<Message>) {
+        val waIdForKey = waId.ifBlank { intent.getStringExtra("wa_id_or_sender") ?: "unknown" }
+        val prefix = cacheKeyPrefix(waIdForKey)
+        val prefs = getSharedPreferences(CHAT_CACHE_PREF, Context.MODE_PRIVATE)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val json = Gson().toJson(messages)
+                val gz = gzipString(json)
+                val b64 = Base64.encodeToString(gz, Base64.NO_WRAP)
+
+                val oldChunks = prefs.getInt("${prefix}count", 0)
+                if (oldChunks > 0) {
+                    val ed = prefs.edit()
+                    for (i in 0 until oldChunks) ed.remove(keyChunk(prefix, i))
+                    ed.remove("${prefix}count")
+                    ed.remove(keyMeta(prefix))
+                    ed.apply()
+                }
+
+                val ed = prefs.edit()
+                var idx = 0
+                var start = 0
+                while (start < b64.length) {
+                    val end = (start + CHUNK_BYTES).coerceAtMost(b64.length)
+                    ed.putString(keyChunk(prefix, idx), b64.substring(start, end))
+                    start = end
+                    idx++
+                }
+                ed.putInt("${prefix}count", idx)
+                ed.putString(keyMeta(prefix), "v1:gzip+b64")
+                ed.apply()
+
+                Log.d(
+                    "CHAT_CACHE",
+                    "Saved ${messages.size} msgs in $idx chunks (waId=$waIdForKey)."
+                )
+            } catch (e: Exception) {
+                Log.e("CHAT_CACHE", "Save failed", e)
+            }
+        }
+    }
+
+    private fun gzipString(s: String): ByteArray {
+        val bos = ByteArrayOutputStream()
+        GZIPOutputStream(bos).use { it.write(s.toByteArray(Charsets.UTF_8)) }
+        return bos.toByteArray()
+    }
+
+    private fun gunzipBytes(b: ByteArray): String {
+        val bis = ByteArrayInputStream(b)
+        return GZIPInputStream(bis).use { it.readBytes().toString(Charsets.UTF_8) }
+    }
+
+    private fun restoreMessagesFromCache() {
+        val waIdForKey = waId.ifBlank { intent.getStringExtra("wa_id_or_sender") ?: "unknown" }
+        val prefix = cacheKeyPrefix(waIdForKey)
+        val prefs = getSharedPreferences(CHAT_CACHE_PREF, Context.MODE_PRIVATE)
+        val chunks = prefs.getInt("${prefix}count", 0)
+        if (chunks <= 0) return
+
+        val isComplete = prefs.getBoolean("${prefix}complete", false)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val sb = StringBuilder(chunks * CHUNK_BYTES)
+                for (i in 0 until chunks) sb.append(prefs.getString(keyChunk(prefix, i), "") ?: "")
+                val gz = Base64.decode(sb.toString(), Base64.NO_WRAP)
+                val json = gunzipBytes(gz)
+
+                val type = object : TypeToken<List<Message>>() {}.type
+                val cached: List<Message> = Gson().fromJson(json, type) ?: emptyList()
+
+                withContext(Dispatchers.Main) {
+                    allMessages.clear()
+                    allMessages.addAll(cached)
+                    allMessages.sortBy { it.timestamp }
+                    adapter.setMessages(allMessages)
+                    if (allMessages.isNotEmpty()) {
+                        binding.recyclerViewMessages.scrollToPosition(allMessages.size - 1)
+                    }
+                    // NEW:
+                    allMessagesLoaded = isComplete
+                    Log.d(
+                        "CHAT_CACHE",
+                        "Restored ${cached.size} msgs; complete=$isComplete (waId=$waIdForKey)"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("CHAT_CACHE", "Restore failed", e)
+            }
+        }
+    }
+
+    private fun mergeNewestPage(newMessages: List<Message>) {
+        fun key(m: Message): String =
+            if (m.messageType == "template")
+                "${m.timestamp}|template|${m.sender}|${m.url}"
+            else
+                "${m.timestamp}|${m.messageType}|${m.messageBody}|${m.url}|${m.sender}"
+
+        val byKey = LinkedHashMap<String, Message>()
+        allMessages.forEach { byKey[key(it)] = it }
+        newMessages.forEach { nm ->
+            val k = key(nm)
+            val ex = byKey[k]
+            if (ex == null) {
+                byKey[k] = nm
+            } else if (nm.messageType == "template") {
+                if ((nm.messageBody?.length ?: 0) > (ex.messageBody?.length ?: 0)) byKey[k] = nm
+            }
+        }
+        allMessages.clear()
+        allMessages.addAll(byKey.values)
+        allMessages.sortBy { it.timestamp }
+        adapter.setMessages(allMessages)
+        saveMessagesLocally(allMessages)
+    }
+
+
 
     fun prefetchAllHistoryFast(onDone: (() -> Unit)? = null) {
-        if (allMessagesLoaded || bulkPrefetchInProgress) { onDone?.invoke(); return }
+        if (allMessagesLoaded || bulkPrefetchInProgress) {
+            onDone?.invoke(); return
+        }
         bulkPrefetchInProgress = true
 
-        // Don’t auto-scroll or rebind while fetching
         val prevSuppress = suppressAutoScroll
         suppressAutoScroll = true
-
-        // Keep current page pointer; your API uses higher page => older
         var page = currentPage + 1
 
         fun step() {
             fetchPage(page,
                 onResult = { items, isLast ->
                     if (isLast || items.isEmpty()) {
-                        // We’re done: sort, render once, restore flags
-                        allMessages.sortBy { it.timestamp }
-                        adapter.setMessages(allMessages)
-                        suppressAutoScroll = prevSuppress
-                        bulkPrefetchInProgress = false
-                        allMessagesLoaded = true
-                        onDone?.invoke()
+                        finishUpPrefetch(prevSuppress, onDone)
                         return@fetchPage
                     }
-
-                    // Only touch the in-memory cache here
-                    allMessages.addAll(0, items) // prepend older ones
-                    // For speed, avoid sorting every page; sort occasionally:
+                    allMessages.addAll(0, items)
                     if (page % 5 == 0) allMessages.sortBy { it.timestamp }
-
                     page += 1
                     step()
                 },
                 onError = {
-                    // fail gracefully: render whatever we have
-                    allMessages.sortBy { it.timestamp }
-                    adapter.setMessages(allMessages)
-                    suppressAutoScroll = prevSuppress
-                    bulkPrefetchInProgress = false
-                    onDone?.invoke()
+                    finishUpPrefetch(prevSuppress, onDone)
                 }
             )
         }
-
         step()
+    }
+
+
+    private fun finishUpPrefetch(prevSuppress: Boolean, onDone: (() -> Unit)?) {
+        allMessages.sortBy { it.timestamp }
+        adapter.setMessages(allMessages)
+        saveMessagesLocally(allMessages)
+        val prefix = cacheKeyPrefix(waId)
+        getSharedPreferences(CHAT_CACHE_PREF, MODE_PRIVATE)
+            .edit()
+            .putBoolean("${prefix}complete", true)
+            .apply()
+
+        suppressAutoScroll = prevSuppress
+        bulkPrefetchInProgress = false
+        allMessagesLoaded = true
+        onDone?.invoke()
+    }
+    private fun templateBodyFor(name: String): String {
+        templateBodyMap[name]?.let { return it }
+        templateFullMap[name]?.optString("components")?.let { comps ->
+            try {
+                val arr = JSONArray(comps)
+                for (i in 0 until arr.length()) {
+                    val c = arr.getJSONObject(i)
+                    if (c.optString("type") == "BODY") return c.optString("text", "")
+                }
+            } catch (_: Exception) {}
+        }
+        return ""
     }
 
 

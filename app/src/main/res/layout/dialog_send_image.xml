@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
-    android:padding="16dp"
+    android:padding="@dimen/_16sdp"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_dialog"
@@ -12,7 +12,7 @@
         android:id="@+id/title"
         android:text="Send Image"
         android:textStyle="bold"
-        android:textSize="18sp"
+        android:textSize="@dimen/_18ssp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>
 
@@ -20,7 +20,7 @@
         android:id="@+id/documentPreview"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="10dp"
+        android:padding="@dimen/_10sdp"
         android:background="@drawable/image_border_box"
         android:orientation="horizontal"
         android:gravity="center_vertical"
@@ -28,11 +28,11 @@
 
         <ImageView
             android:id="@+id/documentIcon"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="@dimen/_40sdp"
+            android:layout_height="@dimen/_40sdp"
             android:src="@drawable/baseline_insert_drive_file_24"
             android:contentDescription="Document Icon"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="@dimen/_8sdp" />
 
         <TextView
             android:id="@+id/documentFileName"
@@ -41,7 +41,7 @@
             android:text="Document.pdf"
             android:textColor="#000"
             android:textStyle="bold"
-            android:textSize="16sp" />
+            android:textSize="@dimen/_16ssp" />
     </LinearLayout>
 
 
@@ -49,9 +49,9 @@
     <ImageView
         android:id="@+id/imagePreview"
         android:layout_width="match_parent"
-        android:padding="10dp"
-        android:layout_height="200dp"
-        android:layout_marginTop="16dp"
+        android:padding="@dimen/_10sdp"
+        android:layout_height="@dimen/_200sdp"
+        android:layout_marginTop="@dimen/_16sdp"
         android:background="@drawable/image_border_box"
         android:scaleType="fitCenter"
         android:visibility="gone"
@@ -59,18 +59,18 @@
 
     <androidx.media3.ui.PlayerView
         android:id="@+id/exoPlayerView"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
+        android:layout_width="@dimen/_200sdp"
+        android:layout_height="@dimen/_200sdp"
         app:use_controller="true"
         app:resize_mode="fit"
-        android:layout_margin="8dp"
+        android:layout_margin="@dimen/_8sdp"
         android:background="#000"
         android:visibility="gone"/>
 
     <EditText
         android:id="@+id/captionEditText"
         android:hint="Add a caption..."
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="@dimen/_16sdp"
         android:layout_width="match_parent"
         android:background="@drawable/bg_message_input"
         android:layout_height="wrap_content"/>
@@ -80,7 +80,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="end"
-        android:layout_marginTop="16dp">
+        android:layout_marginTop="@dimen/_16sdp">
 
         <Button
             android:id="@+id/btnCancel"
@@ -95,6 +95,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:backgroundTint="@color/blue"
-            android:layout_marginStart="8dp"/>
+            android:layout_marginStart="@dimen/_8sdp"/>
     </LinearLayout>
 </LinearLayout>
